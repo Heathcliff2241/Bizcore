@@ -3,9 +3,21 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  // Seed script placeholder
   console.log('Seeding database...')
-  // Add seed data here
+
+  // Create a demo user
+  const user = await prisma.user.upsert({
+    where: { email: 'demo@brandstudio.com' },
+    update: {},
+    create: {
+      email: 'demo@brandstudio.com',
+      firstName: 'Demo',
+      lastName: 'User',
+      password: 'password', // In real app, hash this
+    },
+  })
+
+  console.log('Created user:', user)
 }
 
 main()

@@ -28,6 +28,9 @@ yarn-error.log*
 # Vercel
 .vercel
 
+# BrandStudio Vite app (separate build system)
+brandstudio-vite/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

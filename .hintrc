@@ -1,0 +1,38 @@
+{
+  "extends": [
+    "development"
+  ],
+  "hints": {
+    "typescript-config/consistent-casing": "off",
+    "no-inline-styles": "off",
+    "compat-api/css": [
+      "default",
+      {
+        "ignore": [
+          "-webkit-text-size-adjust"
+        ]
+      }
+    ],
+    "axe/parsing": [
+      "default",
+      {
+        "duplicate-id-active": "off"
+      }
+    ],
+    "axe/text-alternatives": "off",
+    "axe/forms": "off",
+    "axe/name-role-value": "off"
+  },
+  "browserslist": [
+    "defaults",
+    "not ie 11",
+    "not and_ff <= 143",
+    "not firefox <= 143",
+    "not ios_saf <= 26",
+    "not safari <= 26",
+    "not and_chr <= 141",
+    "not chrome <= 141",
+    "not edge <= 141",
+    "not samsung <= 28"
+  ]
+}
