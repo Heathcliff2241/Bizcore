@@ -35,7 +35,8 @@ RUN npm run build
 FROM node:20-bullseye AS runner
 
 WORKDIR /app
-ENV NODE_ENV=development
+# Use production environment for the runtime
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy only essentials from builder

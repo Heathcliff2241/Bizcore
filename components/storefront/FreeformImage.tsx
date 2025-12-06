@@ -36,7 +36,7 @@ function parseAspectRatio(value?: string | number): string | undefined {
 export function FreeformImage({
   src,
   alt,
-  objectFit = 'cover',
+  objectFit = 'contain',
   borderRadius,
   borderColor,
   borderWidth,
@@ -45,14 +45,15 @@ export function FreeformImage({
   boxShadow,
   padding,
   aspectRatio,
+  size
 }: FreeformImageProps) {
   const resolvedSrc = typeof src === 'string' && src.length > 0 ? src : undefined
 
   const containerStyle: CSSProperties = {
-    width: '100%',
-    height: '100%',
+    width: size?.width ? `${size.width}px` : '100%',
+    height: size?.height ? `${size.height}px` : '100%',
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
     backgroundColor: backgroundColor ?? 'transparent',
     borderRadius: borderRadius !== undefined ? `${borderRadius}px` : undefined,
     border: borderWidth ? `${borderWidth}px solid ${borderColor ?? 'transparent'}` : undefined,
@@ -65,7 +66,8 @@ export function FreeformImage({
   }
 
   const ratio = parseAspectRatio(aspectRatio)
-  if (ratio) {
+  // Only apply aspect ratio if NOT using contain mode, which would constrain the image
+  if (ratio && objectFit !== 'contain') {
     containerStyle.aspectRatio = ratio
   }
 
@@ -90,10 +92,12 @@ export function FreeformImage({
         src={resolvedSrc}
         alt={alt ?? ''}
         style={{
-          width: '100%',
-          height: '100%',
+          maxWidth: '100%',
+          maxHeight: '100%',
           objectFit,
-          display: 'block'
+          display: 'block',
+          width: 'auto',
+          height: 'auto'
         }}
       />
     </div>

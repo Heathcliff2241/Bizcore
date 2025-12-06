@@ -1,0 +1,248 @@
+# ===========================================================
+# BizCore Security-Hardened Nginx Configuration
+# Production-ready with SSL/TLS, CSP, rate limiting, etc.
+# ===========================================================
+
+# ====== HTTP → HTTPS REDIRECT ======
+server {
+    listen 80;
+    server_name bizcore.test localhost 127.0.0.1;
+    
+    # Allow Let's Encrypt verification
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    
+    # Redirect all other traffic to HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# ====== HTTPS MAIN SERVER (SSL/TLS HARDENED) ======
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name bizcore.test localhost 127.0.0.1;
+
+    # Logs
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    # ====== SSL/TLS CERTIFICATES ======
+    # Certificates will be placed by certbot or provisioning scripts
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+    # ====== SSL/TLS HARDENING ======
+    # TLS 1.2 and 1.3 only (no older versions)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    
+    # Strong cipher suites - prioritize forward secrecy
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+    ssl_ecdh_curve auto;
+    
+    # Session cache and tickets
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+
+    # OCSP Stapling (requires additional setup)
+    # ssl_stapling on;
+    # ssl_stapling_verify on;
+    # ssl_trusted_certificate /etc/nginx/ssl/chain.pem;
+    # resolver 8.8.8.8 8.8.4.4 valid=300s;
+    # resolver_timeout 5s;
+
+    # ====== SECURITY HEADERS ======
+    # Strict-Transport-Security: Force HTTPS for 2 years
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    
+    # Content-Security-Policy: Control resource loading (allows WebSocket for HMR)
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: ws: wss: http: http://localhost:3000; frame-ancestors 'self';" always;
+    
+    # Prevent clickjacking
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    
+    # Prevent MIME type sniffing
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Enable XSS protection (legacy header, modern CSP is better)
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Referrer policy
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Permissions policy (replaces Feature-Policy)
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" always;
+    
+    # Additional security headers for modern browsers
+    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "cross-origin" always;
+
+    # ====== REQUEST SIZE LIMITS ======
+    client_max_body_size 10m;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 16k;
+
+    # ====== STATIC FILES & NEXT.JS ASSETS ======
+    location ~ ^/(_next|public|static)/ {
+        proxy_pass http://host_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Cache static assets for 30 days
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+        access_log off;
+    }
+
+    # ====== NEXT.JS HMR WEBSOCKET (Hot Module Reloading) ======
+    # IMPORTANT: Use ^~ to prevent regex locations (like static files) from taking precedence
+    location ^~ /_next/webpack-hmr {
+        proxy_pass http://host_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_cache_bypass $http_upgrade;
+        
+        # WebSocket-specific settings
+        proxy_buffering off;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_connect_timeout 60s;
+        proxy_request_buffering off;
+        
+        # Don't log HMR traffic
+        access_log off;
+    }
+
+    # ====== BRANDSTUDIO (Vite app proxy) ======
+    location /studio/ {
+        proxy_pass http://localhost:5174/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        
+        # WebSocket support for Vite HMR
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_cache_bypass $http_upgrade;
+        
+        # Vite dev server settings
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # ====== API ENDPOINTS (Rate Limited) ======
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        limit_conn addr 10;
+        
+        proxy_pass http://host_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Proxy buffering
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # ====== AUTH ENDPOINTS (Strict Rate Limiting) ======
+    location ~ ^/(auth|signin|signup)/ {
+        limit_req zone=login burst=5 nodelay;
+        limit_conn addr 5;
+        
+        proxy_pass http://host_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }
+
+    # ====== ALL OTHER REQUESTS ======
+    location / {
+        limit_req zone=general burst=50 nodelay;
+        limit_conn addr 20;
+        
+        proxy_pass http://host_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # ====== DENY DANGEROUS PATHS ======
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ ~$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ /node_modules/ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ /(config\.php|xmlrpc\.php|wp-admin|wp-login) {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # ====== HEALTH CHECK ENDPOINT ======
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}

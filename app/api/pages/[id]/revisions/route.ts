@@ -3,25 +3,20 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-interface RouteParams {
-  params: {
-    id: string
-  }
-}
-
 // GET /api/pages/[id]/revisions - Get page revisions
 export async function GET(
   request: NextRequest,
-  { params }: RouteParams
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     }
 
     const revisions = await prisma.pageDesignRevision.findMany({
-      where: { pageDesignId: parseInt(params.id) },
+      where: { pageDesignId: parseInt(id, 10) },
       include: {
         user: {
           select: {

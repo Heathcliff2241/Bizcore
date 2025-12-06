@@ -1,6 +1,6 @@
 # =============================================
 # BizCore BrandStudio – Development Compose Stack
-# Database Services Only (Apps run manually)
+# Database Services + Nginx Reverse Proxy
 # =============================================
 
 x-common-healthcheck: &default-health
@@ -9,6 +9,40 @@ x-common-healthcheck: &default-health
   retries: 5
 
 services:
+  # ==========================
+  # Nginx Reverse Proxy (Security-Hardened)
+  # ==========================
+  nginx:
+    image: nginx:latest
+    container_name: bizcore_nginx
+    restart: unless-stopped
+    # Run nginx directly to avoid the default entrypoint scripts which perform
+    # chown operations that can fail on Windows host-mounted filesystems
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    user: root
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./public:/app/public:ro
+    tmpfs:
+      - /var/cache/nginx
+    depends_on:
+      - postgres
+    networks:
+      - bizcore_network
+    environment:
+      # Allow nginx to access host machine services
+      DOCKER_HOST: host.docker.internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ==========================
   # PostgreSQL Database
   # ==========================
@@ -19,7 +53,7 @@ services:
     environment:
       POSTGRES_DB: bizcore_dev
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -32,53 +66,53 @@ services:
       - bizcore_network
 
   # ==========================
-  # PgBouncer Connection Pooler
+  # PgBouncer Connection Pooler - DISABLED (configuration issues with edoburu/pgbouncer image)
+  # Consider using PgBouncer in production with proper config file management
   # ==========================
-  pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: bizcore_pgbouncer
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://postgres:postgres123@postgres:5432/bizcore_dev
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 100
-      DEFAULT_POOL_SIZE: 20
-      LISTEN_PORT: 6432
-    ports:
-      - "6432:6432"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - bizcore_network
+  # pgbouncer:
+  #   image: edoburu/pgbouncer:latest
+  #   container_name: bizcore_pgbouncer
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL: ${DATABASE_URL:-postgres://postgres:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/bizcore_dev}
+  #     POOL_MODE: transaction
+  #     MAX_CLIENT_CONN: 100
+  #     DEFAULT_POOL_SIZE: 20
+  #     LISTEN_PORT: 6432
+  #   ports:
+  #     - "6432:6432"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - bizcore_network
 
   # ==========================
-  # pgAdmin (Database GUI)
+  # pgAdmin (Database GUI) - DISABLED (using Prisma Studio instead)
   # ==========================
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: bizcore_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@bizcore.dev
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - bizcore_network
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: bizcore_pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@bizcore.dev}
+  #     PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+  #     PGADMIN_CONFIG_SERVER_MODE: 'False'
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - pgadmin_data:/var/lib/pgadmin
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - bizcore_network
 
 # ==========================
 # VOLUMES
 # ==========================
 volumes:
   postgres_data:
-  pgadmin_data:
 
 # ==========================
 # NETWORK

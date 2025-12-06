@@ -3,18 +3,42 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { logActivity } from '@/lib/activityLogger'
 
-// CORS headers for Vite dev server
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'http://localhost:5174',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Credentials': 'true',
+// CORS headers - allow BrandStudio origins (both bizcore.test and localhost variants)
+function getCorsHeaders(request: NextRequest) {
+  const origin = request.headers.get('origin') || ''
+  
+  // If no origin header, this is a same-origin request (from the same domain/port)
+  // Don't apply CORS restrictions in this case
+  if (!origin) {
+    return {}
+  }
+  
+  // Allowed origins - support bizcore.test and localhost variants
+  const allowedOrigins = [
+    'http://bizcore.test',
+    'http://localhost:5174',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost',
+  ]
+  
+  const isAllowed = allowedOrigins.some(allowed => 
+    origin === allowed || origin.startsWith(allowed)
+  )
+  
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  }
 }
 
 // Handle OPTIONS request for CORS preflight
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders })
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, { headers: getCorsHeaders(request) })
 }
 
 type RouteParamsResult = { id: string } | Promise<{ id: string }>
@@ -39,12 +63,12 @@ export async function GET(
     const { id } = await resolveParams(context.params)
     const pageId = Number.parseInt(id, 10)
     if (Number.isNaN(pageId)) {
-      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: getCorsHeaders(request) })
     }
 
     const page = await prisma.pageDesign.findUnique({
@@ -59,18 +83,18 @@ export async function GET(
     })
 
     if (!page) {
-      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: corsHeaders })
+      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: getCorsHeaders(request) })
     }
 
     return NextResponse.json({
       success: true,
       data: page
-    }, { headers: corsHeaders })
+    }, { headers: getCorsHeaders(request) })
   } catch (error) {
     console.error('Error fetching page:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to fetch page' },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(request) }
     )
   }
 }
@@ -84,12 +108,12 @@ export async function PUT(
     const { id } = await resolveParams(context.params)
     const pageId = Number.parseInt(id, 10)
     if (Number.isNaN(pageId)) {
-      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: getCorsHeaders(request) })
     }
 
     const body = await request.json()
@@ -109,7 +133,7 @@ export async function PUT(
     })
 
     if (!existingPage) {
-      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: corsHeaders })
+      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: getCorsHeaders(request) })
     }
 
     // Create a revision before updating
@@ -161,15 +185,27 @@ export async function PUT(
       })
     }
 
+    // Log the activity
+    await logActivity({
+      userId: session.user.id,
+      tenantId: existingPage.tenantId,
+      action: 'PAGE_DESIGN_UPDATED',
+      details: {
+        pageId,
+        pageTitle: page.title,
+        updatedFields: Object.keys(updateData).filter(key => key !== 'updatedAt')
+      }
+    })
+
     return NextResponse.json({
       success: true,
       data: page
-    }, { headers: corsHeaders })
+    }, { headers: getCorsHeaders(request) })
   } catch (error) {
     console.error('Error updating page:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to update page' },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(request) }
     )
   }
 }
@@ -183,12 +219,12 @@ export async function DELETE(
     const { id } = await resolveParams(context.params)
     const pageId = Number.parseInt(id, 10)
     if (Number.isNaN(pageId)) {
-      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ message: 'Invalid page id' }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: getCorsHeaders(request) })
     }
 
     const page = await prisma.pageDesign.findUnique({
@@ -196,7 +232,7 @@ export async function DELETE(
     })
 
     if (!page) {
-      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: corsHeaders })
+      return NextResponse.json({ message: 'Page not found' }, { status: 404, headers: getCorsHeaders(request) })
     }
 
     // Delete related records first
@@ -213,15 +249,27 @@ export async function DELETE(
       where: { id: pageId }
     })
 
+    // Log the activity
+    await logActivity({
+      userId: session.user.id,
+      tenantId: page.tenantId,
+      action: 'PAGE_DELETED',
+      details: {
+        pageId,
+        pageTitle: page.title,
+        slug: page.slug
+      }
+    })
+
     return NextResponse.json({
       success: true,
       message: 'Page deleted successfully'
-    }, { headers: corsHeaders })
+    }, { headers: getCorsHeaders(request) })
   } catch (error) {
     console.error('Error deleting page:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to delete page' },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(request) }
     )
   }
 }

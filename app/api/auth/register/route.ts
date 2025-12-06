@@ -1,23 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { generateDefaultPages, templateToPageData } from '@/lib/defaultPages'
-
-// Helper to generate a unique subdomain
-const generateUniqueSubdomain = async (name: string): Promise<string> => {
-  const baseSubdomain = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  let subdomain = baseSubdomain;
-  let counter = 1;
-  while (await prisma.tenant.findUnique({ where: { subdomain } })) {
-    subdomain = `${baseSubdomain}-${counter}`;
-    counter++;
-  }
-  return subdomain;
-};
+import { isRateLimited, recordFailedAttempt, clearFailedAttempts } from '@/lib/rateLimit'
+import { logActivity, getClientIp, getUserAgent, normalizeUserRole } from '@/lib/activityLogger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,9 +23,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
+    // Prevent abuse - rate limit registration attempts
+    if (isRateLimited(`register_${email}`, 5, 900000)) {
+      recordFailedAttempt(`register_${email}`)
+      return NextResponse.json({ error: 'Too many registration attempts. Please try again later.' }, { status: 429 })
+    }
+
+    // Check if user already exists (case-insensitive)
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive'
+        }
+      }
     })
 
     if (existingUser) {
@@ -57,63 +53,43 @@ export async function POST(request: NextRequest) {
     const [firstName, ...lastNameParts] = name.split(' ')
     const lastName = lastNameParts.join(' ') || ''
 
-    // Create user and tenant in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const user = await tx.user.create({
-        data: {
-          firstName,
-          lastName,
-          email,
-          password: hashedPassword,
-          role: 'tenant_owner', // Assign tenant owner role
-        },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          createdAt: true,
-        },
-      });
-
-      // Create tenant
-      const tenantName = businessName?.trim() || `${firstName}'s Business`;
-      const subdomain = await generateUniqueSubdomain(tenantName);
-
-      const tenant = await tx.tenant.create({
-        data: {
-          name: tenantName,
-          subdomain,
-          ownerId: user.id,
-        },
-        select: {
-          id: true,
-          name: true,
-          subdomain: true,
-          createdAt: true,
-        }
-      });
-
-      // Create default pages for the new tenant
-      const defaultPages = generateDefaultPages(tenantName);
-      const pageCreationPromises = defaultPages.map(template => 
-        tx.pageDesign.create({
-          data: templateToPageData(template, tenant.id)
-        })
-      );
-      
-      await Promise.all(pageCreationPromises);
-
-      return { user, tenant };
+    // Create user only (tenant will be created during onboarding)
+    const user = await prisma.user.create({
+      data: {
+        firstName,
+        lastName,
+        email,
+        password: hashedPassword,
+        role: 'tenant_owner', // Assign tenant owner role
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        createdAt: true,
+      },
     });
 
-
+    clearFailedAttempts(`register_${email}`)
+    
+    // Log tenant owner signup (normalize role from tenant_owner to tenant)
+    await logActivity({
+      userId: user.id,
+      action: 'TENANT_SIGNUP',
+      details: {
+        email: user.email,
+        name: user.firstName + ' ' + user.lastName,
+        role: normalizeUserRole('tenant_owner'),
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+    })
+    
     return NextResponse.json(
       {
-        message: 'User and tenant created successfully',
-        user: result.user,
-        tenant: result.tenant,
+        message: 'User created successfully. Please complete onboarding.',
+        user,
       },
       { status: 201 }
     )

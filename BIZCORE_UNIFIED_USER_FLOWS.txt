@@ -1,0 +1,828 @@
+================================================================================
+                   BIZCORE: UNIFIED USER FLOWS (START → END)
+                Complete Journey for Each User Type with Exit Points
+================================================================================
+
+⚠️  CORRECTIONS FROM PREVIOUS VERSION:
+    ✓ Password minimum: 6 characters (NOT 8)
+    ✓ Real user roles: admin, tenant_owner, tenant_user, customer, employee
+    ✓ OTP verification: 6-digit code (10 minute expiry)
+    ✓ Rate limiting: 5 attempts per 15 minutes for auth, 3 OTP requests per hour
+    ✓ Employee/POS flows properly separated
+    ✓ Each flow starts from HOME and ends with LOGOUT
+
+================================================================================
+                    UNIVERSAL ENTRY POINT
+================================================================================
+
+                         [ bizcore.test ]
+                              │
+                    ┌─────────┼─────────┐
+                    │         │         │
+              [Login]  [Register]  [Browse]
+                    │         │         │
+                    └─────────┼─────────┘
+                              │
+                    ┌─────────▼─────────┐
+                    │  /auth/signin or  │
+                    │  /auth/signup     │
+                    └──────────────────┘
+
+
+================================================================================
+                     FLOW 1: SUPER ADMIN (SaaS Owner)
+================================================================================
+
+START
+  │
+  ├─► [ Visit bizcore.test ]
+  │
+  ├─► [ Click "Sign In" ]
+  │
+  ├─► [ Navigate to /auth/signin ]
+  │
+  ├─► [ ENTER CREDENTIALS ]
+  │   ├─ Email: admin@bizcore.com
+  │   └─ Password: ••••••••••
+  │
+  ├─► [ SUBMIT FORM ]
+  │   │
+  │   ├─► [ EMAIL VALIDATION ]
+  │   │   └─ Check format + existence
+  │   │   └─ Error if invalid → [SHOW ERROR]
+  │   │
+  │   ├─► [ PASSWORD VALIDATION ]
+  │   │   └─ Minimum 6 characters
+  │   │   └─ Error if < 6 chars → [SHOW ERROR]
+  │   │   └─ Error if wrong → Record attempt (5 max/15min)
+  │   │
+  │   ├─► [ RATE LIMITING CHECK ]
+  │   │   └─ 5 attempts per 15 minutes
+  │   │   └─ If exceeded → [SHOW "TRY AGAIN IN X MIN"]
+  │   │
+  │   ├─► [ BCRYPT PASSWORD COMPARE ]
+  │   │   └─ Hash password & compare
+  │   │   └─ If no match → [RECORD FAILED ATTEMPT]
+  │   │
+  │   ├─► [ FETCH USER ROLE FROM DB ]
+  │   │   └─ Query: User.role = 'admin'
+  │   │   └─ Include in JWT token
+  │   │
+  │   └─► [ CREATE JWT SESSION ]
+  │       ├─ Token expires: 24 hours
+  │       ├─ Includes: id, email, role='admin', name
+  │       └─ Store as HTTP-only cookie
+  │
+  ├─► [ MIDDLEWARE VALIDATION ]
+  │   ├─ Verify token signature
+  │   ├─ Check expiration (24h)
+  │   └─ Confirm role='admin'
+  │
+  ├─► [ SMART ROLE-BASED REDIRECT ]
+  │   ├─ Check: token.role === 'admin' ?
+  │   └─ YES → Redirect to /admin/dashboard
+  │
+  ├─► [ /ADMIN DASHBOARD ]
+  │   │
+  │   ├──► [ Business Metrics ]
+  │   │    ├─ Total Revenue Chart
+  │   │    ├─ Active Tenants Count
+  │   │    ├─ Monthly Subscription Revenue
+  │   │    └─ Tenant Health Status
+  │   │
+  │   ├──► [ Tenants Management ]
+  │   │    ├─ View all tenants
+  │   │    ├─ Create new tenant
+  │   │    ├─ Edit tenant details
+  │   │    ├─ Monitor tenant health
+  │   │    ├─ Pause/Activate tenants
+  │   │    └─ View subscription status
+  │   │
+  │   ├──► [ Users Management ]
+  │   │    ├─ View all system users
+  │   │    ├─ Filter by role/status
+  │   │    ├─ Create new admin user
+  │   │    ├─ Edit user details
+  │   │    ├─ Change user roles
+  │   │    ├─ Deactivate users
+  │   │    └─ Reset passwords
+  │   │
+  │   ├──► [ Subscriptions & Billing ]
+  │   │    ├─ View all plans
+  │   │    ├─ Monitor revenue metrics
+  │   │    ├─ View invoices
+  │   │    ├─ Manage subscription tiers
+  │   │    └─ Renewal tracking
+  │   │
+  │   ├──► [ Activity Logs ]
+  │   │    ├─ User login history
+  │   │    ├─ Tenant actions
+  │   │    ├─ API calls
+  │   │    ├─ System errors
+  │   │    └─ Filter by date/action
+  │   │
+  │   └──► [ Settings ]
+  │        ├─ Platform configuration
+  │        ├─ Email settings
+  │        ├─ Payment configuration
+  │        └─ Security settings
+  │
+  ├─► [ LOGOUT ]
+  │   ├─ Click "Sign Out" button
+  │   ├─ POST /api/auth/logout
+  │   ├─ Clear JWT token
+  │   ├─ Delete HTTP-only cookie
+  │   ├─ Clear session data
+  │   └─ Redirect to /auth/signin
+  │
+END
+
+
+================================================================================
+                FLOW 2: TENANT OWNER (Business Owner)
+================================================================================
+
+START
+  │
+  ├─► [ Visit bizcore.test ]
+  │
+  ├─► [ CHOICE: New or Existing? ]
+  │
+  ├── IF NEW TENANT:
+  │   │
+  │   ├─► [ Click "Create Account" ]
+  │   │
+  │   ├─► [ /auth/signup Page ]
+  │   │   ├─ Full Name: "John Doe"
+  │   │   ├─ Business Name: "Coffee Shop"
+  │   │   ├─ Email: john@coffee.local
+  │   │   ├─ Password: SecurePass123
+  │   │   ├─ Confirm: SecurePass123
+  │   │   └─ Terms checkbox
+  │   │
+  │   ├─► [ VALIDATE INPUTS ]
+  │   │   ├─ Name: not empty
+  │   │   ├─ Email: valid format + not exists
+  │   │   ├─ Password: >= 6 chars
+  │   │   ├─ Confirm: matches password
+  │   │   └─ Error if any invalid
+  │   │
+  │   ├─► [ HASH PASSWORD ]
+  │   │   └─ bcryptjs.hash(password, 10)
+  │   │
+  │   ├─► [ CREATE USER IN DB ]
+  │   │   ├─ User.email = email
+  │   │   ├─ User.password = hashed
+  │   │   ├─ User.role = 'tenant_owner'
+  │   │   ├─ User.isActive = true
+  │   │   └─ User.emailVerified = false
+  │   │
+  │   ├─► [ SEND WELCOME EMAIL ]
+  │   │   └─ Via Nodemailer (Ethereal/SMTP)
+  │   │
+  │   ├─► [ REDIRECT TO /onboarding ]
+  │   │   │
+  │   │   ├─► [ ONBOARDING FLOW ]
+  │   │   │   ├─ Step 1: Welcome
+  │   │   │   ├─ Step 2: Business Details
+  │   │   │   ├─ Step 3: Store Customization
+  │   │   │   ├─ Step 4: Products Setup
+  │   │   │   ├─ Step 5: Team (Optional)
+  │   │   │   ├─ Step 6: Payment Method
+  │   │   │   └─ Step 7: Complete
+  │   │   │
+  │   │   ├─► [ CREATE TENANT ]
+  │   │   │   ├─ Tenant.name = businessName
+  │   │   │   ├─ Tenant.subdomain = auto-generated
+  │   │   │   ├─ Tenant.ownerId = user.id
+  │   │   │   ├─ Tenant.subscriptionPlan = 'free'
+  │   │   │   └─ Tenant.isActive = true
+  │   │   │
+  │   │   └─► [ CREATE STOREFRONT ]
+  │   │       ├─ Default homepage
+  │   │       ├─ Products page
+  │   │       ├─ Login page
+  │   │       └─ Checkout page
+  │   │
+  │   ├─► [ CREATE JWT SESSION ]
+  │   │   ├─ Token includes role='tenant_owner'
+  │   │   └─ Includes tenantId
+  │   │
+  │   └─► [ AUTO-REDIRECT TO /dashboard/{subdomain} ]
+  │
+  ├─ ELSE IF EXISTING TENANT:
+  │   │
+  │   ├─► [ Click "Sign In" ]
+  │   │
+  │   ├─► [ /auth/signin Page ]
+  │   │   ├─ Email: john@coffee.local
+  │   │   └─ Password: ••••••••••
+  │   │
+  │   ├─► [ VALIDATE & AUTHENTICATE ]
+  │   │   ├─ Email validation
+  │   │   ├─ Password check (bcrypt)
+  │   │   ├─ Rate limiting: 5/15min
+  │   │   ├─ Fetch User.role = 'tenant_owner'
+  │   │   └─ Create JWT session
+  │   │
+  │   ├─► [ FETCH TENANT INFO ]
+  │   │   ├─ Query owned tenant
+  │   │   ├─ Get subdomain
+  │   │   └─ Include in token (tenantId)
+  │   │
+  │   └─► [ REDIRECT TO /dashboard/{subdomain} ]
+  │
+  ├─► [ TENANT DASHBOARD ]
+  │   │
+  │   ├──► [ Sales Overview ]
+  │   │    ├─ Today's Revenue
+  │   │    ├─ Orders Count
+  │   │    ├─ Monthly Chart
+  │   │    └─ Top Products
+  │   │
+  │   ├──► [ Products Management ]
+  │   │    ├─ View all products
+  │   │    ├─ Create new product
+  │   │    │  ├─ Name
+  │   │    │  ├─ SKU
+  │   │    │  ├─ Price
+  │   │    │  ├─ Stock level
+  │   │    │  ├─ Images
+  │   │    │  ├─ Variants (sizes, colors)
+  │   │    │  └─ Category
+  │   │    ├─ Edit products
+  │   │    ├─ Delete products
+  │   │    ├─ Bulk import
+  │   │    ├─ Stock tracking
+  │   │    └─ Low stock alerts
+  │   │
+  │   ├──► [ Orders Management ]
+  │   │    ├─ View all orders
+  │   │    ├─ Filter by status
+  │   │    ├─ Process new orders
+  │   │    │  ├─ Mark as confirmed
+  │   │    │  ├─ Arrange packaging
+  │   │    │  ├─ Generate invoice
+  │   │    │  └─ Send confirmation email
+  │   │    ├─ Fulfill orders
+  │   │    │  ├─ Pick items
+  │   │    │  ├─ Pack box
+  │   │    │  └─ Generate shipping label
+  │   │    ├─ Ship orders
+  │   │    │  ├─ Add tracking #
+  │   │    │  └─ Notify customer
+  │   │    ├─ Track returns
+  │   │    └─ Refund orders
+  │   │
+  │   ├──► [ BrandStudio (Storefront Designer) ]
+  │   │    ├─ Launch BrandStudio
+  │   │    ├─ Edit homepage
+  │   │    │  ├─ Drag-drop components
+  │   │    │  ├─ Edit hero section
+  │   │    │  ├─ Add product grid
+  │   │    │  ├─ Customize colors/fonts
+  │   │    │  └─ Add footer
+  │   │    ├─ Create new pages
+  │   │    ├─ Edit existing pages
+  │   │    ├─ Preview on device
+  │   │    │  ├─ Desktop view
+  │   │    │  ├─ Tablet view
+  │   │    │  └─ Mobile view
+  │   │    ├─ Auto-save design
+  │   │    ├─ Publish changes
+  │   │    └─ View published storefront
+  │   │
+  │   ├──► [ Customers Management ]
+  │   │    ├─ View all customers
+  │   │    ├─ Customer history
+  │   │    │  ├─ Purchase history
+  │   │    │  ├─ Order frequency
+  │   │    │  └─ Lifetime value
+  │   │    ├─ Customer profiles
+  │   │    ├─ Email customers
+  │   │    └─ Manage reviews
+  │   │
+  │   ├──► [ Analytics ]
+  │   │    ├─ Sales dashboard
+  │   │    ├─ Revenue trends
+  │   │    ├─ Top selling products
+  │   │    ├─ Customer insights
+  │   │    ├─ Traffic metrics
+  │   │    ├─ Conversion rates
+  │   │    └─ Export PDF reports
+  │   │
+  │   ├──► [ Team Management ]
+  │   │    ├─ Add employees
+  │   │    │  ├─ First Name
+  │   │    │  ├─ Last Name
+  │   │    │  ├─ Email
+  │   │    │  ├─ Role (manager, cashier, etc)
+  │   │    │  └─ Set PIN for POS
+  │   │    ├─ View all employees
+  │   │    ├─ Edit employee details
+  │   │    ├─ Set permissions
+  │   │    ├─ View activity logs
+  │   │    └─ Deactivate employees
+  │   │
+  │   ├──► [ Subscription & Billing ]
+  │   │    ├─ View current plan
+  │   │    ├─ Plan details
+  │   │    ├─ Upgrade plan
+  │   │    ├─ Downgrade plan
+  │   │    ├─ Billing history
+  │   │    ├─ Invoices
+  │   │    ├─ Payment method
+  │   │    ├─ Cancel subscription
+  │   │    └─ Renewal date
+  │   │
+  │   └──► [ Settings ]
+  │        ├─ Store name
+  │        ├─ Store description
+  │        ├─ Contact info
+  │        ├─ Email notifications
+  │        ├─ Payment methods
+  │        ├─ Shipping settings
+  │        ├─ Tax settings
+  │        └─ Change password
+  │
+  ├─► [ LOGOUT ]
+  │   ├─ Click "Sign Out"
+  │   ├─ Clear JWT session
+  │   ├─ Delete cookies
+  │   └─ Redirect to /auth/signin
+  │
+END
+
+
+================================================================================
+             FLOW 3: EMPLOYEE/STAFF (POS Worker)
+================================================================================
+
+START
+  │
+  ├─► [ Tenant Owner creates employee account ]
+  │   ├─ In Dashboard → Team Management
+  │   ├─ Click "Add Employee"
+  │   ├─ First Name: "Jane"
+  │   ├─ Last Name: "Smith"
+  │   ├─ Email: jane@coffee.local
+  │   ├─ Password: ••••••••••
+  │   ├─ PIN: 1234 (for POS)
+  │   ├─ Role: "cashier" | "manager" | "staff"
+  │   └─ Click "Create Employee"
+  │
+  ├─► [ EMPLOYEE CREATED IN DB ]
+  │   ├─ Employee.email = email
+  │   ├─ Employee.password = hashed
+  │   ├─ Employee.pin = hashed
+  │   ├─ Employee.role = 'cashier'
+  │   ├─ Employee.tenantId = tenant.id
+  │   └─ Employee.isActive = true
+  │
+  ├─► [ EMPLOYEE NOTIFIED ]
+  │   └─ Email with login credentials
+  │
+  ├─► [ EMPLOYEE VISITS /pos ]
+  │   │
+  │   ├─► [ /pos/login Page ]
+  │   │   ├─ Email: jane@coffee.local
+  │   │   ├─ Password: ••••••••••
+  │   │   └─ Subdomain: coffee-shop
+  │   │
+  │   ├─► [ VALIDATE CREDENTIALS ]
+  │   │   ├─ Email validation
+  │   │   ├─ Password check (bcrypt)
+  │   │   ├─ Rate limiting: 5/15min
+  │   │   ├─ Check Employee.isActive
+  │   │   └─ Verify tenant match
+  │   │
+  │   ├─► [ CREATE JWT TOKEN ]
+  │   │   ├─ Special POS JWT (12h expiry)
+  │   │   ├─ Includes: id, email, role, tenantId
+  │   │   └─ Can also use PIN login (numeric)
+  │   │
+  │   └─► [ REDIRECT TO /pos/dashboard ]
+  │
+  ├─► [ POS DASHBOARD ]
+  │   │
+  │   ├──► [ Create New Order ]
+  │   │    ├─ Search or scan product SKU
+  │   │    ├─ Add to cart
+  │   │    ├─ Specify quantity
+  │   │    ├─ Check stock availability
+  │   │    ├─ Apply discount (if allowed)
+  │   │    ├─ Select customer (or create new)
+  │   │    ├─ Select payment method
+  │   │    │  ├─ Cash
+  │   │    │  ├─ Card
+  │   │    │  ├─ Mobile wallet
+  │   │    │  └─ Credit
+  │   │    ├─ Process payment
+  │   │    └─ Print receipt/invoice
+  │   │
+  │   ├──► [ Active Orders ]
+  │   │    ├─ View in-progress orders
+  │   │    ├─ Check order status
+  │   │    ├─ Edit order (if allowed)
+  │   │    └─ Cancel order
+  │   │
+  │   ├──► [ Quick Inventory ]
+  │   │    ├─ View stock levels
+  │   │    ├─ Low stock items
+  │   │    ├─ Search by name/SKU
+  │   │    └─ Update stock (if allowed)
+  │   │
+  │   ├──► [ Daily Reports ]
+  │   │    ├─ Today's sales total
+  │   │    ├─ Orders count
+  │   │    ├─ Payment breakdown
+  │   │    ├─ Top selling items
+  │   │    └─ Print day-end report
+  │   │
+  │   ├──► [ Transactions History ]
+  │   │    ├─ View all past orders
+  │   │    ├─ Filter by date
+  │   │    ├─ Search orders
+  │   │    ├─ View refunds
+  │   │    ├─ Void transactions (if allowed)
+  │   │    └─ Reprint receipts
+  │   │
+  │   └──► [ Settings (Limited) ]
+  │        ├─ Change password
+  │        ├─ View assigned role
+  │        ├─ View permissions
+  │        └─ Printer settings
+  │
+  ├─► [ LOGOUT FROM POS ]
+  │   ├─ Click "Sign Out"
+  │   ├─ Clear JWT token
+  │   ├─ Clear POS session
+  │   └─ Redirect to /pos/login
+  │
+END
+
+
+================================================================================
+          FLOW 4: CUSTOMER (Shopper on Tenant Storefront)
+================================================================================
+
+START
+  │
+  ├─► [ Visit Tenant Storefront ]
+  │   └─ URL: storefront.coffee-shop.bizcore.test (or custom domain)
+  │
+  ├─► [ VIEW HOMEPAGE ]
+  │   ├─ Hero section (customized by tenant)
+  │   ├─ Featured products
+  │   ├─ Product categories
+  │   ├─ Store info (contact, hours)
+  │   └─ Footer with links
+  │
+  ├─► [ BROWSE PRODUCTS ]
+  │   ├─ View all products
+  │   ├─ Search by name
+  │   ├─ Filter by category
+  │   ├─ Sort by price/name/rating
+  │   ├─ View product details
+  │   │  ├─ Images/gallery
+  │   │  ├─ Price
+  │   │  ├─ Description
+  │   │  ├─ Rating/reviews
+  │   │  ├─ Stock status
+  │   │  └─ Variants (sizes, colors)
+  │   └─ Track recent views
+  │
+  ├─► [ ADD TO CART ]
+  │   ├─ Select variant (if available)
+  │   ├─ Enter quantity
+  │   ├─ Add to cart
+  │   ├─ Continue shopping or proceed
+  │   └─ Cart updates (React state + localStorage)
+  │
+  ├─► [ VIEW CART ]
+  │   ├─ List all items
+  │   ├─ Show quantities + prices
+  │   ├─ Calculate subtotal
+  │   ├─ Edit quantities
+  │   ├─ Remove items
+  │   ├─ Apply coupon (if available)
+  │   └─ Proceed to checkout
+  │
+  ├─► [ CHECKOUT - PHASE 1: LOGIN/SIGNUP ]
+  │   │
+  │   ├─ OPTION A: LOGIN (Returning Customer)
+  │   │  │
+  │   │  ├─► [ /storefront/[subdomain]/login ]
+  │   │  │   ├─ Email: customer@example.com
+  │   │  │   ├─ Password: ••••••••••
+  │   │  │   └─ "Forgot Password?" link
+  │   │  │
+  │   │  ├─► [ VALIDATE CREDENTIALS ]
+  │   │  │   ├─ Email validation
+  │   │  │   ├─ Check customer exists
+  │   │  │   ├─ Password check (bcrypt)
+  │   │  │   ├─ Rate limiting: 5/15min
+  │   │  │   ├─ Check Customer.isActive
+  │   │  │   └─ Create customer JWT
+  │   │  │
+  │   │  └─► [ FETCH CUSTOMER INFO ]
+  │   │      ├─ Get saved addresses
+  │   │      ├─ Get order history
+  │   │      └─ Pre-fill checkout
+  │   │
+  │   ├─ OPTION B: SIGNUP (New Customer)
+  │   │  │
+  │   │  ├─► [ /storefront/[subdomain]/signup ]
+  │   │  │   ├─ First Name: "Bob"
+  │   │  │   ├─ Last Name: "Johnson"
+  │   │  │   ├─ Email: bob@example.com
+  │   │  │   ├─ Password: ••••••••••
+  │   │  │   ├─ Confirm: ••••••••••
+  │   │  │   └─ Terms checkbox
+  │   │  │
+  │   │  ├─► [ VALIDATE INPUTS ]
+  │   │  │   ├─ Name: not empty
+  │   │  │   ├─ Email: valid format + not exists
+  │   │  │   ├─ Password: >= 6 characters
+  │   │  │   ├─ Confirm: matches
+  │   │  │   └─ Error if invalid
+  │   │  │
+  │   │  ├─► [ CREATE CUSTOMER ]
+  │   │  │   ├─ Customer.firstName = firstName
+  │   │  │   ├─ Customer.lastName = lastName
+  │   │  │   ├─ Customer.email = email
+  │   │  │   ├─ Customer.password = hashed
+  │   │  │   ├─ Customer.tenantId = tenant.id
+  │   │  │   ├─ Customer.isActive = true
+  │   │  │   └─ Customer.emailVerified = false
+  │   │  │
+  │   │  ├─► [ SEND WELCOME EMAIL ]
+  │   │  │   └─ Verification link included
+  │   │  │
+  │   │  └─► [ CREATE CUSTOMER JWT ]
+  │   │      └─ 24h expiry, customer role
+  │   │
+  │   ├─ OPTION C: CHECKOUT AS GUEST
+  │   │  │
+  │   │  ├─► [ Skip login, enter info during checkout ]
+  │   │  │   └─ No account created (optional)
+  │   │  │
+  │   │  └─► [ Create temp customer or order-only ]
+  │   │
+  │   └─► [ ALL OPTIONS CONVERGE TO SHIPPING ]
+  │
+  ├─► [ CHECKOUT - PHASE 2: SHIPPING ADDRESS ]
+  │   ├─ IF RETURNING: Show saved addresses
+  │   │   ├─ Select existing address
+  │   │   └─ Or add new address
+  │   │
+  │   ├─ IF NEW/GUEST: Enter address
+  │   │   ├─ Full Name
+  │   │   ├─ Street Address
+  │   │   ├─ City / Region / State
+  │   │   ├─ Postal Code
+  │   │   ├─ Phone Number
+  │   │   ├─ Save for future? (checkbox)
+  │   │   └─ Validate address format
+  │   │
+  │   └─► [ VALIDATE ADDRESS ]
+  │       └─ Required fields + format
+  │
+  ├─► [ CHECKOUT - PHASE 3: SHIPPING METHOD ]
+  │   ├─ Show available shipping options:
+  │   │  ├─ Standard (5-7 days) - $5
+  │   │  ├─ Express (2-3 days) - $15
+  │   │  └─ Overnight - $30
+  │   ├─ Select preferred method
+  │   ├─ Calculate shipping cost
+  │   └─ Update order total
+  │
+  ├─► [ CHECKOUT - PHASE 4: PAYMENT ]
+  │   ├─ Select payment method:
+  │   │  ├─ Credit Card
+  │   │  ├─ Debit Card
+  │   │  ├─ Mobile Wallet
+  │   │  └─ Other (based on tenant config)
+  │   │
+  │   ├─ Enter payment details (ENCRYPTED)
+  │   │  ├─ Card Number (PCI compliant)
+  │   │  ├─ Expiry Date
+  │   │  ├─ CVC/CVV
+  │   │  ├─ Cardholder Name
+  │   │  └─ Billing Address
+  │   │
+  │   ├─► [ VALIDATE PAYMENT ]
+  │   │   ├─ Format validation (client-side)
+  │   │   ├─ Check card validity
+  │   │   └─ Verify billing address
+  │   │
+  │   ├─► [ PROCESS PAYMENT ]
+  │   │   ├─ Send to Payment Gateway (Stripe/PayPal/etc)
+  │   │   ├─ Gateway validates card
+  │   │   ├─ Check funds available
+  │   │   ├─ Authorize transaction
+  │   │   └─ Return authorization code
+  │   │
+  │   └─► [ PAYMENT RESULT ]
+  │       ├─ SUCCESS → Proceed to order creation
+  │       └─ FAILED → Show error, retry option
+  │
+  ├─► [ CREATE ORDER ]
+  │   ├─ Order.customerId = customer.id
+  │   ├─ Order.tenantId = tenant.id
+  │   ├─ Order.items = [...cart items]
+  │   ├─ Order.total = calculated amount
+  │   ├─ Order.status = 'pending'
+  │   ├─ Order.shippingAddress = {...}
+  │   ├─ Order.shippingMethod = selected
+  │   ├─ Order.paymentMethod = selected
+  │   ├─ Order.createdAt = now()
+  │   └─ Generate unique Order ID
+  │
+  ├─► [ CONFIRMATION PAGE ]
+  │   ├─ Order # (e.g., #12345)
+  │   ├─ Items ordered
+  │   ├─ Order total
+  │   ├─ Shipping address
+  │   ├─ Estimated delivery date
+  │   ├─ Tracking information (when available)
+  │   └─ "Continue Shopping" link
+  │
+  ├─► [ CONFIRMATION EMAIL ]
+  │   └─ Send to customer.email
+  │       ├─ Order details
+  │       ├─ Order tracking link
+  │       ├─ Shipping address
+  │       └─ Contact support link
+  │
+  ├─► [ CUSTOMER NOTIFIED ]
+  │   └─ Tenant Owner gets notification to process order
+  │
+  ├─► [ CUSTOMER ACCOUNT PAGE ]
+  │   ├─ Click "My Account" (if logged in)
+  │   ├─ View order history
+  │   │  ├─ Past orders list
+  │   │  ├─ Order statuses
+  │   │  ├─ Order dates
+  │   │  └─ Order totals
+  │   ├─ Track current order
+  │   │  ├─ Status (pending → processing → shipped → delivered)
+  │   │  ├─ Tracking number
+  │   │  └─ Estimated arrival
+  │   ├─ Manage addresses
+  │   │  ├─ View saved addresses
+  │   │  ├─ Add new address
+  │   │  ├─ Edit address
+  │   │  └─ Delete address
+  │   ├─ Profile settings
+  │   │  ├─ Change name
+  │   │  ├─ Change email
+  │   │  ├─ Change password
+  │   │  └─ Manage preferences
+  │   ├─ Wishlist (if enabled)
+  │   └─ Reviews & ratings
+  │
+  ├─► [ LOGOUT (If Logged In) ]
+  │   ├─ Click "Sign Out"
+  │   ├─ Clear customer JWT
+  │   ├─ Delete session cookie
+  │   └─ Redirect to home
+  │
+END
+
+
+================================================================================
+                    COMMON FLOWS (ALL USERS)
+================================================================================
+
+PASSWORD RESET FLOW
+────────────────────────────────────────────────────────────────────────────
+
+  [ Any User ]
+    │
+    └─► [ Click "Forgot Password?" ]
+        │
+        ├─► [ Enter Email ]
+        │   └─ Validate format
+        │
+        ├─► [ RATE LIMIT CHECK ]
+        │   └─ 10 requests per 15 minutes
+        │
+        ├─► [ EMAIL LOOKUP ]
+        │   ├─ Find user by email
+        │   └─ Return 200 OK even if not found (security)
+        │
+        ├─► [ GENERATE RESET TOKEN ]
+        │   ├─ Random 32-byte hex string
+        │   ├─ Expires: 1 hour
+        │   └─ Store in User table
+        │
+        ├─► [ SEND EMAIL ]
+        │   ├─ Reset link with token
+        │   ├─ Expires in 1 hour
+        │   └─ Via Nodemailer
+        │
+        ├─► [ USER CLICKS LINK ]
+        │   └─ /auth/reset?token=...
+        │
+        ├─► [ RESET PASSWORD PAGE ]
+        │   ├─ New Password: ••••••••••
+        │   └─ Confirm: ••••••••••
+        │
+        ├─► [ VALIDATE ]
+        │   ├─ Token not expired
+        │   ├─ Passwords >= 6 chars
+        │   ├─ Match confirmed
+        │   └─ Token exists in DB
+        │
+        ├─► [ UPDATE PASSWORD ]
+        │   ├─ Hash new password
+        │   ├─ Update User.password
+        │   ├─ Clear reset token
+        │   └─ Clear expiry
+        │
+        ├─► [ SUCCESS MESSAGE ]
+        │   └─ "Password reset successfully"
+        │
+        └─► [ REDIRECT TO /auth/signin ]
+
+
+ERROR HANDLING
+────────────────────────────────────────────────────────────────────────────
+
+AUTHENTICATION ERRORS:
+  ├─ Invalid email format → "Please enter valid email"
+  ├─ Email already exists → "Account with this email exists"
+  ├─ Password < 6 chars → "Password must be at least 6 characters"
+  ├─ Passwords don't match → "Passwords do not match"
+  ├─ User not found → "Email or password incorrect"
+  ├─ Wrong password → "Email or password incorrect"
+  ├─ Account inactive → "Account has been deactivated"
+  ├─ Rate limited → "Too many attempts. Try again in X minutes"
+  └─ Server error → "An error occurred. Please try again."
+
+ORDER ERRORS:
+  ├─ Out of stock → "Item no longer available"
+  ├─ Quantity exceeded → "Can't order more than X units"
+  ├─ Invalid product ID → "Product not found"
+  ├─ Missing shipping address → "Please enter shipping address"
+  ├─ Invalid payment → "Payment method not accepted"
+  ├─ Payment declined → "Card was declined. Try another"
+  ├─ Order total mismatch → "Order total has changed. Please review"
+  └─ Tenant inactive → "This store is currently unavailable"
+
+
+SECURITY & RATE LIMITING
+────────────────────────────────────────────────────────────────────────────
+
+Authentication (Login):
+  └─ 5 attempts per 15 minutes per IP/email
+
+Registration (Signup):
+  └─ 5 attempts per 15 minutes per email
+
+Password Reset (Forgot):
+  └─ 10 requests per 15 minutes per email
+
+OTP Verification:
+  └─ 3 OTP requests per hour per email
+  └─ Max 10 verification attempts per OTP
+
+
+SESSION MANAGEMENT
+────────────────────────────────────────────────────────────────────────────
+
+NextAuth JWT Sessions:
+  ├─ Expiry: 24 hours (user/tenant/admin)
+  ├─ Expiry: 12 hours (POS employee)
+  ├─ Storage: HTTP-only cookie
+  ├─ Signed with: NEXTAUTH_SECRET
+  ├─ Includes: id, email, role, tenantId, name
+  └─ Refresh: Auto-refresh on activity
+
+Session Validation:
+  ├─ Middleware checks on every request
+  ├─ Verify token signature
+  ├─ Check expiration
+  ├─ Validate user still active
+  └─ Role-based access control
+
+
+================================================================================
+                        TECHNOLOGY STACK USED
+================================================================================
+
+AUTHENTICATION:     NextAuth.js 4.x + JWT
+PASSWORD HASHING:   bcryptjs (10 rounds)
+DATABASE:           PostgreSQL + Prisma ORM
+EMAIL:              Nodemailer (Ethereal dev, SMTP prod)
+PAYMENTS:           Stripe/PayPal (pluggable)
+SESSION STORAGE:    HTTP-Only Cookies
+SECURITY:           CORS, CSP, HSTS, Rate Limiting
+VALIDATION:         Client-side + Server-side
+
+
+================================================================================
+                        LAST UPDATED: December 4, 2025
+                            STATUS: ✅ CORRECTED
+================================================================================

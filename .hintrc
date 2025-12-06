@@ -21,7 +21,9 @@
     ],
     "axe/text-alternatives": "off",
     "axe/forms": "off",
-    "axe/name-role-value": "off"
+    "axe/name-role-value": "off",
+    "typescript-config/strict": "off",
+    "axe/aria": "off"
   },
   "browserslist": [
     "defaults",

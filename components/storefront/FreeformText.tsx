@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import DOMPurify from 'dompurify'
 
 type TextValue = string | Record<string, unknown> | null | undefined
 
@@ -198,7 +199,20 @@ export function FreeformText(props: FreeformTextProps) {
   }
 
   if (isLikelyHtml(trimmedText)) {
-    return <div style={style} dangerouslySetInnerHTML={{ __html: trimmedText }} />
+    // Sanitize HTML before injecting to prevent XSS
+    let sanitized = trimmedText
+    try {
+      if (typeof window !== 'undefined' && DOMPurify) {
+        sanitized = DOMPurify.sanitize(trimmedText)
+      } else {
+        // Fallback: strip HTML tags on server side
+        sanitized = trimmedText.replace(/<[^>]+>/g, '')
+      }
+    } catch (err) {
+      console.warn('[FreeformText] sanitize error:', err)
+      sanitized = trimmedText.replace(/<[^>]+>/g, '')
+    }
+    return <div style={style} dangerouslySetInnerHTML={{ __html: sanitized }} />
   }
 
   return <div style={style}>{trimmedText}</div>

@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { getBrandStudioUrl, getPostMessageOrigin } from '@/lib/getAppUrl'
 
 export default function BrandStudioPage() {
   const params = useParams()
   const subdomain = params.subdomain as string
   const [tenantData, setTenantData] = useState<{ id: number; name: string; subdomain: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [brandStudioUrl, setBrandStudioUrl] = useState('')
+  const [postMessageOrigin, setPostMessageOrigin] = useState('')
+
+  useEffect(() => {
+    // Get the brand studio URL and post message origin
+    setBrandStudioUrl(getBrandStudioUrl())
+    setPostMessageOrigin(getPostMessageOrigin())
+  }, [])
 
   useEffect(() => {
     // Fetch tenant data
@@ -16,7 +25,10 @@ export default function BrandStudioPage() {
         const response = await fetch(`/api/tenants/by-subdomain/${subdomain}`)
         if (response.ok) {
           const data = await response.json()
+          console.log('[BrandStudio] Fetched tenant data:', data)
           setTenantData(data)
+        } else {
+          console.error('[BrandStudio] Failed to fetch tenant:', response.status)
         }
       } catch (error) {
         console.error('Failed to fetch tenant:', error)
@@ -30,7 +42,7 @@ export default function BrandStudioPage() {
 
   useEffect(() => {
     // Send tenant data to iframe when loaded
-    if (tenantData) {
+    if (tenantData && postMessageOrigin) {
       const iframe = document.getElementById('brandstudio-iframe') as HTMLIFrameElement
       if (iframe?.contentWindow) {
         const message = {
@@ -38,14 +50,15 @@ export default function BrandStudioPage() {
           tenant: tenantData
         }
         // Try sending to the actual iframe origin
+        console.log('[BrandStudio] Sending TENANT_DATA to', postMessageOrigin, tenantData)
         try {
-          iframe.contentWindow.postMessage(message, 'http://localhost:5174')
+          iframe.contentWindow.postMessage(message, postMessageOrigin)
         } catch (error) {
-          console.error('Failed to send message to iframe:', error)
+          console.error('[BrandStudio] Failed to send TENANT_DATA message to iframe:', error)
         }
       }
     }
-  }, [tenantData])
+  }, [tenantData, postMessageOrigin])
 
   if (loading) {
     return (
@@ -98,24 +111,26 @@ export default function BrandStudioPage() {
       <div className="flex-1 relative overflow-hidden">
         <iframe
           id="brandstudio-iframe"
-          src={`http://localhost:5174?tenantId=${tenantData.id}&subdomain=${tenantData.subdomain}`}
+          src={`${brandStudioUrl}?tenantId=${tenantData?.id ?? ''}&subdomain=${tenantData?.subdomain ?? ''}`}
           className="w-full h-full border-0"
           title="BrandStudio Editor"
           allow="clipboard-read; clipboard-write"
           onLoad={() => {
             // Send tenant data when iframe loads
             const iframe = document.getElementById('brandstudio-iframe') as HTMLIFrameElement
-            if (iframe?.contentWindow) {
+            if (iframe?.contentWindow && postMessageOrigin && tenantData) {
               const message = {
                 type: 'TENANT_DATA',
                 tenant: tenantData
               }
               // Wait a bit for iframe to be ready
+              console.log('[BrandStudio] Iframe loaded, sending TENANT_DATA to', postMessageOrigin, 'with tenantId:', tenantData.id)
               setTimeout(() => {
                 try {
-                  iframe.contentWindow?.postMessage(message, 'http://localhost:5174')
+                  iframe.contentWindow?.postMessage(message, postMessageOrigin)
+                  console.log('[BrandStudio] TENANT_DATA sent successfully on iframe load with id:', tenantData.id)
                 } catch (error) {
-                  console.error('Failed to send message on load:', error)
+                  console.error('[BrandStudio] Failed to send message on load:', error)
                 }
               }, 500)
             }

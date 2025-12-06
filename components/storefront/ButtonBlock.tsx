@@ -18,7 +18,7 @@ export function ButtonBlock({
   url = '#',
   variant = 'primary',
   size = 'medium',
-  fullWidth = false,
+  fullWidth = true,
   backgroundColor = '#3b82f6',
   textColor = '#ffffff',
   borderColor = '#3b82f6',
@@ -54,8 +54,8 @@ export function ButtonBlock({
   }
 
   return (
-    <section className="py-8 px-8 md:px-16 lg:px-24 w-full">
-      <div className="w-full max-w-7xl mx-auto text-center">
+    <section className={`py-8 w-full ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}>
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} text-center`}>
         <a
           href={resolvedLink.href}
           target={resolvedLink.isExternal ? '_blank' : undefined}

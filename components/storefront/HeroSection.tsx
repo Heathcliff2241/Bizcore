@@ -6,35 +6,40 @@ import type { StorefrontContext } from "./types";
 import { resolveStorefrontHref } from "./utils/links";
 
 type HeroSectionProps = {
-  heading?: string;
+heading?: string;
+  headingSize?: number;
   subheading?: string;
+  subheadingSize?: number;
   ctaText?: string;
   ctaUrl?: string;
   backgroundImage?: string;
   backgroundColor?: string;
-  textColor?: string;
+textColor?: string;
   alignment?: "left" | "center" | "right";
   height?: number;
-  storefront?: StorefrontContext;
+storefront?: StorefrontContext;
+  fullWidth?: boolean;
 };
 
 export function HeroSection({
-  heading = "Welcome to Our Store",
+heading = "Welcome to Our Store",
+  headingSize = 48,
   subheading = "Discover amazing products",
+  subheadingSize = 24,
   ctaText = "Shop Now",
   ctaUrl = "#",
   backgroundImage,
   backgroundColor = "#3b82f6",
-  textColor = "#ffffff",
+textColor = "#ffffff",
   alignment = "center",
   height = 600,
-  storefront,
+storefront,
 }: HeroSectionProps) {
   const ctaLink = resolveStorefrontHref(ctaUrl, storefront, { allowEmpty: true, label: ctaText });
 
   return (
     <section
-      className="relative w-full overflow-hidden"
+      className="relative w-full overflow-hidden flex items-center"
       style={{
         height: `${height}px`,
         backgroundColor: backgroundImage ? "transparent" : backgroundColor,
@@ -55,31 +60,34 @@ export function HeroSection({
       )}
 
       {/* Content */}
-      <div className="relative z-10 w-full h-full flex items-center px-8 md:px-16 lg:px-24">
-        <motion.div
-          className={`w-full max-w-7xl ${
-            alignment === "center"
-              ? "mx-auto text-center"
-              : alignment === "right"
-              ? "ml-auto text-right"
-              : "text-left"
-          }`}
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          viewport={{ once: true }}
-        >
+      <motion.div
+        className={`relative z-10 w-full ${
+          alignment === "center"
+            ? "text-center"
+            : alignment === "right"
+            ? "text-right"
+            : "text-left"
+        }`}
+        style={{
+          paddingLeft: alignment === "left" ? "2rem" : undefined,
+          paddingRight: alignment === "right" ? "2rem" : undefined,
+        }}
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        viewport={{ once: true }}
+      >
           <h1
-            className="text-[clamp(2.5rem,6vw,4rem)] font-bold mb-6 leading-tight tracking-tight"
-            style={{ color: textColor }}
+            className="font-bold mb-6 leading-tight tracking-tight"
+            style={{ color: textColor, fontSize: `${headingSize}px` }}
           >
             {heading}
           </h1>
 
           {subheading && (
             <p
-              className="text-[clamp(1.25rem,3vw,1.75rem)] mb-8 opacity-90"
-              style={{ color: textColor }}
+              className="mb-8 opacity-90"
+              style={{ color: textColor, fontSize: `${subheadingSize}px` }}
             >
               {subheading}
             </p>
@@ -98,7 +106,6 @@ export function HeroSection({
             </motion.a>
           )}
         </motion.div>
-      </div>
-    </section>
-  );
-}
+      </section>
+    );
+  }

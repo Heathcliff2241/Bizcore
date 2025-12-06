@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'BrandStudio',
-  description: 'Figma-level design tool built with Next.js',
+  description: 'design tool built with Next.js',
 }
 
 export default function BrandstudioLayout({

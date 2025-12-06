@@ -42,7 +42,10 @@ export default function SignUp() {
       })
 
       if (response.ok) {
-        router.push('/auth/signin?message=Registration successful! Please sign in.')
+        // User created successfully, redirect to onboarding to complete registration
+        localStorage.removeItem('onboarding_step')
+        localStorage.removeItem('onboarding_info')
+        router.push('/onboarding')
       } else {
         const data = await response.json()
         setError(data.error || 'Registration failed')
@@ -54,60 +57,102 @@ export default function SignUp() {
     }
   }
 
-  const inputClasses = "w-full p-3 rounded-lg border border-emerald-200 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-emerald-400 focus:outline-none text-slate-800 placeholder-slate-400";
+  const inputClasses = "w-full px-4 py-3 bg-white border border-blue-200 rounded-lg text-slate-900 placeholder:text-blue-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/30 transition-all";
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-100 overflow-hidden">
-      <motion.div
-        animate={{ x: [0, 30, 0], y: [0, 20, 0] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-20 left-10 w-56 h-56 rounded-full bg-emerald-300 blur-3xl opacity-30"
-      />
-      <motion.div
-        animate={{ x: [0, -40, 0], y: [0, -25, 0] }}
-        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-16 right-12 w-64 h-64 rounded-full bg-teal-300 blur-3xl opacity-25"
-      />
-      
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 bg-white/80 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.15)] rounded-3xl p-10 w-full max-w-md"
-      >
-        <h1 className="text-3xl font-extrabold text-center text-emerald-700 mb-6 tracking-tight">
-          Create Your BizCore Account
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50/40 to-white overflow-x-hidden relative">
+      {/* Dark blue gradient accent overlay */}
+      <div className="absolute inset-0 pointer-events-none opacity-5 z-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-transparent to-indigo-900" />
+      </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
+      {/* Animated background orbs */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        <motion.div
+          animate={{ x: [-60, 60, -60], y: [0, 30, 0] }}
+          transition={{ duration: 30, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute rounded-full opacity-10 left-0 top-0 w-96 h-96 blur-3xl bg-gradient-to-br from-blue-600 to-blue-400"
+        />
+        <motion.div
+          animate={{ x: [60, -60, 60], y: [0, -30, 0] }}
+          transition={{ duration: 35, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute w-80 h-80 rounded-full opacity-8 right-0 top-1/3 blur-3xl bg-gradient-to-br from-blue-700 to-indigo-600"
+        />
+      </div>
+
+      <div className="relative min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="bg-white p-8 rounded-3xl shadow-xl border border-blue-100/50"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <h1 className="text-3xl font-bold text-blue-900 mb-2 text-center">Create Account</h1>
+              <p className="text-blue-600 text-center text-sm mb-6">
+                Build your business with BizCore
+              </p>
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+            <form className="space-y-5" onSubmit={handleSubmit}>
           {error && (
-            <div className="text-red-600 text-sm font-semibold text-center p-2 bg-red-100 border border-red-200 rounded-lg">
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
+            >
               {error}
-            </div>
+            </motion.div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              className={inputClasses}
-              placeholder="Full Name"
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+          <input
+            id="name"
+            name="name"
+            type="text"
+            required
+            className={inputClasses}
+            placeholder="Full Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-            <input
-              id="businessName"
-              name="businessName"
-              type="text"
-              className={inputClasses}
-              placeholder="Business Name (Optional)"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-            />
-          </div>
+          </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+          >
+          <input
+            id="businessName"
+            name="businessName"
+            type="text"
+            className={inputClasses}
+            placeholder="Business Name (Optional)"
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+          />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
           <input
             id="email"
             name="email"
@@ -118,7 +163,13 @@ export default function SignUp() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+          >
           <input
             id="password"
             name="password"
@@ -129,7 +180,13 @@ export default function SignUp() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
           <input
             id="confirmPassword"
             name="confirmPassword"
@@ -140,27 +197,35 @@ export default function SignUp() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
+          </motion.div>
 
           <motion.button
             type="submit"
             disabled={loading}
             whileTap={{ scale: 0.97 }}
-            whileHover={{ scale: 1.02, boxShadow: "0 6px 14px rgba(16,185,129,0.3)" }}
-            className={`w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg font-bold hover:from-emerald-600 hover:to-emerald-700 transition-all duration-300 ${
-              loading ? "opacity-70 cursor-not-allowed" : ""
-            }`}
+            whileHover={{ scale: 1.02 }}
+            className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </motion.button>
-        </form>
 
-        <div className="text-center mt-8 text-sm text-emerald-800/70">
-          Already have an account?{' '}
-          <Link href="/auth/signin" className="text-emerald-600 font-semibold hover:underline">
-            Sign In
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-blue-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-blue-600 font-medium">Already have an account?</span>
+            </div>
+          </div>
+
+          <Link href="/auth/signin" className="w-full py-3 border-2 border-blue-600 text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition-all duration-300 block text-center">
+            Sign In Instead
           </Link>
+              </form>
+            </motion.div>
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

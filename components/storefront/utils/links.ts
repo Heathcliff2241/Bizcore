@@ -26,6 +26,8 @@ const LABEL_ROUTE_ALIASES: Record<string, string> = {
   orders: '/account',
   login: '/auth/signin',
   signin: '/auth/signin',
+  forgot: '/auth/forgot',
+  reset: '/auth/reset',
   signup: '/auth/signup',
   register: '/auth/signup'
 }
@@ -86,6 +88,11 @@ export function resolveStorefrontHref(
 
   let trimmed = candidate.trim()
 
+  // Compute the storefront base path for tenant-aware routing early so it can
+  // be used by alias mapping logic below; this avoids using `base` before
+  // initialization and keeps all path calculations consistent.
+  const base = storefront ? `/storefront/${storefront.subdomain}` : ''
+
   if (trimmed === '#') {
     return {
       href: '#',
@@ -108,17 +115,26 @@ export function resolveStorefrontHref(
 
   const aliasPath = aliasLookupKey ? LABEL_ROUTE_ALIASES[aliasLookupKey] : undefined
   if (aliasPath) {
-    trimmed = aliasPath
+    // If we're rendering inside a storefront and the alias maps to an auth route,
+    // prefer the storefront's own route (e.g. /storefront/{subdomain}/signup) so
+    // site authors can create tenant-local signup/sign-in pages that shadow global auth routes.
+    if (storefront && aliasPath.startsWith('/auth/')) {
+      // convert '/auth/signup' -> '/storefront/{subdomain}/signup'
+      const storefrontPath = `${base}${aliasPath.replace(/^\/auth/, '')}`
+      trimmed = storefrontPath
+    } else {
+      trimmed = aliasPath
+    }
   }
 
-  if (trimmed.startsWith('/storefront/') || trimmed.startsWith('/api/')) {
+  if (trimmed.startsWith('/storefront/') || trimmed.startsWith('/api/') || trimmed.startsWith('/auth/')) {
     return {
       href: trimmed,
       isExternal: false
     }
   }
 
-  const base = storefront ? `/storefront/${storefront.subdomain}` : ''
+  // `base` is already defined above.
 
   if (!base) {
     if (trimmed.startsWith('/')) {

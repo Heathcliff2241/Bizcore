@@ -13,7 +13,6 @@ interface CheckoutSummaryProps {
 	borderRadius?: number
 	border?: string
 	padding?: number
-	buttonLabel?: string
 	note?: string
 }
 
@@ -22,12 +21,11 @@ export function CheckoutSummary({
 	tax,
 	shipping,
 	discount,
-	currency = '$',
+	currency = '₱',
 	backgroundColor = '#ffffff',
 	borderRadius = 8,
 	border = '1px solid #e2e8f0',
 	padding = 24,
-	buttonLabel = 'Proceed to Checkout',
 	note = 'Shipping and taxes calculated at checkout.'
 }: CheckoutSummaryProps) {
 	const fallbackSubtotal = 24.25
@@ -76,13 +74,6 @@ export function CheckoutSummary({
 					</span>
 				</div>
 			</div>
-
-			<button
-				type="button"
-				className="w-full bg-gray-900 text-white py-3 rounded-md text-sm font-semibold tracking-wide hover:bg-gray-800 transition-colors"
-			>
-				{buttonLabel}
-			</button>
 
 			{note && <p className="text-xs text-gray-500">{note}</p>}
 		</aside>

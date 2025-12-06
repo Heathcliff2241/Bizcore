@@ -1,126 +1,304 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import type { Customer, Order as OrderModel, OrderItem as OrderItemModel, Product } from '@prisma/client'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { resolveTenant } from '@/lib/tenant'
+import { logTenantActivity } from '@/lib/activityLogger'
 
-async function getTenantId(userId: string): Promise<number | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: parseInt(userId, 10) },
-    include: { tenantUsers: true },
-  });
-  return user?.tenantUsers[0]?.tenantId ?? null;
+type LoadedOrder = OrderModel & {
+  customer: Customer | null
+  orderItems: Array<OrderItemModel & { product: Product }>
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+function formatOrder(order: LoadedOrder & Record<string, unknown> | null) {
+  if (!order) {
+    return null
   }
 
-  const tenantId = await getTenantId(session.user.id);
-  if (!tenantId) {
-    return NextResponse.json({ message: 'User is not associated with a tenant' }, { status: 403 });
+  const subtotal = order.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  return {
+    id: order.id,
+    order_number: order.orderNumber,
+    customer_name: order.customer
+      ? `${order.customer.firstName} ${order.customer.lastName}`.trim()
+      : 'Guest',
+    customer_email: order.customer?.email ?? null,
+    customer_phone: order.customer?.phone ?? null,
+    delivery_address: (order as Record<string, unknown>).deliveryAddress || null,
+    delivery_city: null,
+    delivery_state: null,
+    delivery_postal_code: null,
+    created_at: order.createdAt,
+    total_amount: order.total,
+    subtotal_amount: subtotal,
+    tax_amount: order.tax,
+    delivery_fee: 0,
+    order_status: order.status,
+    payment_status: order.paymentStatus,
+    payment_method: order.paymentMethod,
+    amount_paid: order.amountPaid,
+    payment_proof: order.paymentProof || null,
+    order_type: order.orderType,
+    OrderItems: order.orderItems.map((item) => ({
+      id: item.id,
+      product_name: item.product.name,
+      quantity: item.quantity,
+      unit_price: item.price,
+      subtotal: item.price * item.quantity
+    }))
+  }
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const subdomain = searchParams.get('subdomain')
+
+  const tenant = await resolveTenant(session, subdomain)
+  if (!tenant) {
+    return NextResponse.json({ message: 'Tenant not found' }, { status: 404 })
   }
 
   try {
-    const order = await prisma.order.findUnique({
-      where: { id: parseInt(id, 10), tenantId },
+    const order = (await prisma.order.findFirst({
+      where: { id: Number(id), tenantId: tenant.id },
       include: {
         customer: true,
         orderItems: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
+          include: { product: true }
+        }
+      }
+    })) as (LoadedOrder & Record<string, unknown>) | null
 
     if (!order) {
-      return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
+      return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 })
     }
-    
-    const formattedOrder = {
-        ...order,
-        order_number: order.orderNumber,
-        customer_name: order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : 'Guest',
-        customer_email: order.customer?.email,
-        customer_phone: order.customer?.phone,
-        created_at: order.createdAt,
-        total_amount: order.total,
-        subtotal_amount: order.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
-        tax_amount: order.tax,
-        delivery_fee: 0, // Assuming no delivery fee for now
-        order_status: order.status,
-        OrderItems: order.orderItems.map(item => ({
-            id: item.id,
-            product_name: item.product.name,
-            quantity: item.quantity,
-            unit_price: item.price,
-            subtotal: item.price * item.quantity,
-        }))
-    };
 
-    return NextResponse.json({ success: true, data: { order: formattedOrder } });
+    const formattedOrder = formatOrder(order)
+
+    return NextResponse.json({ success: true, data: { order: formattedOrder } })
   } catch (error) {
-    console.error('Failed to fetch order details:', error);
-    return NextResponse.json({ success: false, message: 'Failed to fetch order details' }, { status: 500 });
+    console.error('Failed to fetch order details:', error)
+    return NextResponse.json({ success: false, message: 'Failed to fetch order details' }, { status: 500 })
   }
 }
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const subdomain = searchParams.get('subdomain')
+
+  const tenant = await resolveTenant(session, subdomain)
+  if (!tenant) {
+    return NextResponse.json({ message: 'Tenant not found' }, { status: 404 })
+  }
+
+  const { order_status, payment_status, amount_paid } = await request.json() as unknown as {
+    order_status?: string
+    payment_status?: string
+    amount_paid?: number
+  }
+
+  try {
+    const updateData: Record<string, unknown> = {}
+    
+    // Fetch current order first
+    const currentOrder = await prisma.order.findFirst({
+      where: { id: Number(id), tenantId: tenant.id },
+      include: {
+        orderItems: {
+          include: { product: true }
+        }
+      }
+    })
+
+    if (!currentOrder) {
+      return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 })
     }
-  
-    const tenantId = await getTenantId(session.user.id);
-    if (!tenantId) {
-      return NextResponse.json({ message: 'User is not associated with a tenant' }, { status: 403 });
+
+    // Handle payment status
+    if (payment_status) {
+      updateData.paymentStatus = payment_status
+      
+      // Auto-set amountPaid when status is 'paid'
+      if (payment_status === 'paid' && amount_paid === undefined) {
+        updateData.amountPaid = currentOrder.total
+      }
+      
+      // Reset amountPaid to 0 when refunded
+      if (payment_status === 'refunded') {
+        updateData.amountPaid = 0
+      }
     }
 
-    const { order_status } = await request.json();
-
-    try {
-        const updatedOrder = await prisma.order.update({
-            where: { id: parseInt(id, 10), tenantId },
-            data: { status: order_status },
-            include: {
-                customer: true,
-                orderItems: {
-                  include: {
-                    product: true,
-                  },
-                },
-              },
-        });
-
-        const formattedOrder = {
-            ...updatedOrder,
-            order_number: updatedOrder.orderNumber,
-            customer_name: updatedOrder.customer ? `${updatedOrder.customer.firstName} ${updatedOrder.customer.lastName}` : 'Guest',
-            customer_email: updatedOrder.customer?.email,
-            customer_phone: updatedOrder.customer?.phone,
-            created_at: updatedOrder.createdAt,
-            total_amount: updatedOrder.total,
-            subtotal_amount: updatedOrder.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
-            tax_amount: updatedOrder.tax,
-            delivery_fee: 0, // Assuming no delivery fee for now
-            order_status: updatedOrder.status,
-            OrderItems: updatedOrder.orderItems.map(item => ({
-                id: item.id,
-                product_name: item.product.name,
-                quantity: item.quantity,
-                unit_price: item.price,
-                subtotal: item.price * item.quantity,
-            }))
-        };
-
-        return NextResponse.json({ success: true, data: { order: formattedOrder } });
-
-    } catch (error) {
-        console.error('Failed to update order status:', error);
-        return NextResponse.json({ success: false, message: 'Failed to update order status' }, { status: 500 });
+    // Handle explicit amount_paid
+    if (amount_paid !== undefined) {
+      updateData.amountPaid = amount_paid
     }
+
+    // Handle order status transitions with inventory management
+    if (order_status) {
+      updateData.status = order_status
+      
+      const deductibleStatuses = ['ready', 'completed', 'out_for_delivery', 'delivered']
+      const currentStatus = currentOrder.status
+      const isTransitioningToDeductible = deductibleStatuses.includes(order_status) && !deductibleStatuses.includes(currentStatus)
+      const isCancelling = order_status === 'cancelled' && !deductibleStatuses.includes(currentStatus)
+      const isReorderingAfterDeduction = currentStatus === 'cancelled' && !deductibleStatuses.includes(order_status)
+
+      if (isTransitioningToDeductible) {
+        // ORDER COMPLETING: Convert reserved stock to permanent deduction
+        console.log(`[Order ${currentOrder.orderNumber}] Completing: Converting reserved stock to permanent deduction`)
+        
+        await prisma.$transaction(async (tx) => {
+          for (const orderItem of currentOrder.orderItems) {
+            const product = await tx.product.findUnique({ 
+              where: { id: orderItem.productId }, 
+              include: { productIngredients: true } 
+            })
+            
+            if (!product) {
+              throw new Error(`Product ${orderItem.productId} not found`)
+            }
+
+            if (product.productIngredients && product.productIngredients.length > 0) {
+              for (const pi of product.productIngredients) {
+                const deductQty = pi.quantity * orderItem.quantity
+                const ingredient = await tx.ingredient.findUnique({ 
+                  where: { id: pi.ingredientId } 
+                })
+                
+                if (!ingredient) {
+                  throw new Error(`Ingredient ${pi.ingredientId} not found`)
+                }
+
+                // Validate reserved stock exists
+                if (ingredient.reservedStock < deductQty) {
+                  throw new Error(`Not enough reserved stock for ingredient ${ingredient.name}. Reserved: ${ingredient.reservedStock}, Required: ${deductQty}`)
+                }
+
+                // Move from reserved to permanent deduction:
+                // 1. Decrement from reservedStock
+                // 2. Decrement from currentStock
+                await tx.ingredient.update({
+                  where: { id: pi.ingredientId },
+                  data: {
+                    reservedStock: { decrement: deductQty },
+                    currentStock: { decrement: deductQty }
+                  }
+                })
+
+                // Log the permanent deduction
+                await tx.inventoryTransaction.create({
+                  data: {
+                    tenantId: tenant.id,
+                    ingredientId: pi.ingredientId,
+                    type: 'out',
+                    quantity: deductQty,
+                    reason: `Order ${currentOrder.orderNumber} - COMPLETED`,
+                    cost: Number(ingredient.costPerUnit ?? 0) * deductQty
+                  }
+                })
+              }
+            }
+          }
+        })
+      } else if (isCancelling) {
+        // ORDER CANCELLING: Release reserved stock back to available
+        console.log(`[Order ${currentOrder.orderNumber}] Cancelling: Releasing reserved stock`)
+        
+        await prisma.$transaction(async (tx) => {
+          for (const orderItem of currentOrder.orderItems) {
+            const product = await tx.product.findUnique({
+              where: { id: orderItem.productId },
+              include: { productIngredients: true }
+            })
+            
+            if (!product) {
+              throw new Error(`Product ${orderItem.productId} not found`)
+            }
+
+            if (product.productIngredients && product.productIngredients.length > 0) {
+              for (const pi of product.productIngredients) {
+                const releaseQty = pi.quantity * orderItem.quantity
+                const ingredient = await tx.ingredient.findUnique({
+                  where: { id: pi.ingredientId }
+                })
+                
+                if (!ingredient) {
+                  throw new Error(`Ingredient ${pi.ingredientId} not found`)
+                }
+
+                // Release reserved stock (just decrement reservedStock, currentStock unchanged)
+                await tx.ingredient.update({
+                  where: { id: pi.ingredientId },
+                  data: {
+                    reservedStock: { decrement: releaseQty }
+                  }
+                })
+
+                // Log the release
+                await tx.inventoryTransaction.create({
+                  data: {
+                    tenantId: tenant.id,
+                    ingredientId: pi.ingredientId,
+                    type: 'reserved_released',
+                    quantity: releaseQty,
+                    reason: `Order ${currentOrder.orderNumber} - CANCELLED`
+                  }
+                })
+              }
+            }
+          }
+        })
+      }
+    }
+
+    const updatedOrder = (await prisma.order.update({
+      where: { id: Number(id) },
+      data: updateData,
+      include: {
+        customer: true,
+        orderItems: {
+          include: { product: true }
+        }
+      }
+    })) as LoadedOrder & Record<string, unknown>
+
+    // Log the activity
+    await logTenantActivity(
+      tenant.id,
+      'ORDER_UPDATED',
+      undefined,
+      {
+        orderId: Number(id),
+        orderNumber: currentOrder.orderNumber,
+        changes: Object.keys(updateData),
+        newStatus: updateData.status,
+        newPaymentStatus: updateData.paymentStatus,
+        amountPaid: updateData.amountPaid
+      }
+    )
+
+    const formattedOrder = formatOrder(updatedOrder)
+
+    return NextResponse.json({ success: true, data: { order: formattedOrder } })
+  } catch (error) {
+    console.error('Failed to update order:', error)
+    const msg = (error instanceof Error) ? error.message : 'Failed to update order'
+    const userStatus = msg && msg.toLowerCase().includes('insufficient') ? 400 : 500
+    return NextResponse.json({ success: false, message: msg }, { status: userStatus })
+  }
 }

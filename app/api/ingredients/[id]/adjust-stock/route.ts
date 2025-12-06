@@ -1,104 +1,88 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth/next'
+
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { resolveTenant } from '@/lib/tenant'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id: paramId } = await params;
   try {
+    const { id } = await context.params
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
+
+    if (!session || !session.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const id = parseInt(paramId)
-    if (isNaN(id)) {
-      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
+    const { searchParams } = new URL(request.url)
+    const subdomain = searchParams.get('subdomain')
+
+    const tenant = await resolveTenant(session, subdomain)
+
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+  const ingredientId = Number(id)
+
+    if (!Number.isFinite(ingredientId)) {
+      return NextResponse.json({ error: 'Invalid ingredient id' }, { status: 400 })
     }
 
     const { quantity_change, transaction_type, notes } = await request.json()
 
-    if (quantity_change === undefined || !transaction_type) {
-      return NextResponse.json(
-        { error: 'quantity_change and transaction_type are required' },
-        { status: 400 }
-      )
+    const quantityChange = Number(quantity_change)
+
+    if (!Number.isFinite(quantityChange) || quantityChange === 0) {
+      return NextResponse.json({ error: 'Quantity change must be a non-zero number' }, { status: 400 })
     }
 
-    const quantity = parseFloat(quantity_change)
-    if (isNaN(quantity)) {
-      return NextResponse.json(
-        { error: 'Invalid quantity_change' },
-        { status: 400 }
-      )
+    if (!transaction_type || typeof transaction_type !== 'string') {
+      return NextResponse.json({ error: 'Transaction type is required' }, { status: 400 })
     }
 
-    // Get current ingredient
-    const ingredient = await prisma.ingredient.findUnique({
-      where: { id }
+    const ingredient = await prisma.ingredient.findFirst({
+      where: { id: ingredientId, tenantId: tenant.id }
     })
 
     if (!ingredient) {
-
-        return NextResponse.json(
-        { error: 'Ingredient not found' },
-        { status: 404 }
-    )
+      return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 })
     }
 
-    // Calculate new stock
-    const newStock = ingredient.currentStock + quantity
+    const updatedStock = ingredient.currentStock + quantityChange
 
-    if (newStock < 0) {
-      return NextResponse.json(
-        { error: 'Stock cannot go below 0' },
-        { status: 400 }
-      )
+    if (updatedStock < 0) {
+      return NextResponse.json({ error: 'Stock cannot be negative' }, { status: 400 })
     }
 
-    // Update stock
-    await prisma.ingredient.update({
-      where: { id },
-      data: { currentStock: newStock }
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedIngredient = await tx.ingredient.update({
+        where: { id: ingredientId },
+        data: { currentStock: updatedStock }
+      })
+
+      const performedBy = Number(session.user.id)
+
+      await tx.inventoryTransaction.create({
+        data: {
+          tenantId: tenant.id,
+          ingredientId,
+          type: transaction_type,
+          quantity: quantityChange,
+          reason: notes,
+          performedBy: Number.isFinite(performedBy) ? performedBy : undefined
+        }
+      })
+
+      return updatedIngredient
     })
 
-    // Create transaction record
-    const userIdRaw = (session.user as any)?.id
-    const performedBy =
-      typeof userIdRaw === 'string'
-        ? parseInt(userIdRaw, 10)
-        : typeof userIdRaw === 'number'
-        ? userIdRaw
-        : null
-
-    if (performedBy === null || Number.isNaN(performedBy)) {
-      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
-    }
-
-    await prisma.inventoryTransaction.create({
-      data: {
-        tenantId: ingredient.tenantId,
-        ingredientId: id,
-        type: transaction_type,
-        quantity,
-        reason: notes,
-        performedBy
-      }
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: 'Stock adjusted successfully'
-    })
+    return NextResponse.json({ data: { ingredient: result } })
   } catch (error) {
-    console.error('Failed to adjust stock:', error)
-    return NextResponse.json(
-      { error: 'Failed to adjust stock' },
-      { status: 500 }
-    )
+    console.error('[INGREDIENT_ADJUST_STOCK_POST]', error)
+    return NextResponse.json({ error: 'Failed to adjust stock' }, { status: 500 })
   }
 }

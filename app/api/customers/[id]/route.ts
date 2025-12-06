@@ -1,26 +1,23 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTenant } from '@/lib/tenant';
 
-async function getTenantId(userId: string): Promise<number | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: parseInt(userId, 10) },
-    include: { tenantUsers: true },
-  });
-  return user?.tenantUsers[0]?.tenantId ?? null;
-}
-
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const tenantId = await getTenantId(session.user.id);
-  if (!tenantId) {
-    return NextResponse.json({ message: 'User is not associated with a tenant' }, { status: 403 });
+  const { searchParams } = new URL(request.url);
+  const subdomain = searchParams.get('subdomain');
+
+  const tenant = await resolveTenant(session, subdomain);
+
+  if (!tenant) {
+    return NextResponse.json({ message: 'Tenant not found' }, { status: 404 });
   }
 
   try {
@@ -40,7 +37,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
     });
 
-    if (!customer || customer.tenantId !== tenantId) {
+    if (!customer || customer.tenantId !== tenant.id) {
       return NextResponse.json(
         { message: 'Customer not found' },
         { status: 404 }
@@ -60,6 +57,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           notes: customer.notes,
           createdAt: customer.createdAt,
           updatedAt: customer.updatedAt,
+          totalOrders: customer.orders.length,
+          totalSpent: customer.orders.reduce((sum: number, order: any) => sum + (Number(order.total) || 0), 0),
+          lastOrderDate: customer.orders[0]?.createdAt,
           orders: customer.orders.map(order => ({
             id: order.id,
             totalAmount: order.total,
@@ -75,5 +75,44 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       { error: 'Failed to fetch customer' },
       { status: 500 }
     );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const { firstName, lastName, phone } = body
+
+    // Verify user owns this customer record
+    const customer = await prisma.customer.findFirst({
+      where: { id: parseInt(id), email: session.user.email }
+    })
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    }
+
+    const updated = await prisma.customer.update({
+      where: { id: parseInt(id) },
+      data: {
+        firstName: firstName || customer.firstName,
+        lastName: lastName || customer.lastName,
+        phone: phone !== undefined ? phone : customer.phone
+      }
+    })
+
+    return NextResponse.json({ success: true, customer: updated })
+  } catch (error) {
+    console.error('Error updating customer:', error)
+    return NextResponse.json({ error: 'Failed to update customer' }, { status: 500 })
   }
 }

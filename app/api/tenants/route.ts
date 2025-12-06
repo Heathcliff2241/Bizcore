@@ -14,6 +14,14 @@ export async function GET() {
       )
     }
 
+    // Admin users should not have tenant access
+    if (session.user.role === 'admin') {
+      return NextResponse.json(
+        { error: 'Admin users do not have tenant access' },
+        { status: 403 }
+      )
+    }
+
     // Get the user's ID from the session
     const userId = parseInt(session.user.id, 10)
 

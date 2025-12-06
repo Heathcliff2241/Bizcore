@@ -1,4 +1,9 @@
+"use client"
 import Image from 'next/image'
+import { useSession } from 'next-auth/react'
+import { useCustomerSession } from './hooks/useCustomerSession'
+// No react hooks are needed here other than the custom hook
+import { useCart } from './hooks/useCart'
 
 interface CartItem {
   id?: string | number
@@ -41,7 +46,7 @@ const FALLBACK_ITEMS: CartItem[] = [
 ]
 
 export function CartItems({
-  items = [],
+  items = undefined,
   currency = '$',
   backgroundColor = '#f7fafc',
   borderRadius = 12,
@@ -52,7 +57,12 @@ export function CartItems({
   showRemove = true,
   textColor = '#1f2937'
 }: CartItemsProps) {
-  const displayItems = items.length > 0 ? items : FALLBACK_ITEMS
+  // If items not passed, use persisted cart
+  const { data: session } = useCustomerSession()
+  const isClient = typeof window !== 'undefined'
+  const subdomain = isClient ? window.location.pathname.split('/')[2] : undefined
+  const cartHook = useCart(subdomain, session?.user?.id)
+  const displayItems = (items && items.length > 0) ? items : (cartHook.cart.length > 0 ? cartHook.cart : FALLBACK_ITEMS)
 
   const itemTotal = (item: CartItem) => (item.price * (item.quantity ?? 1)).toFixed(2)
 

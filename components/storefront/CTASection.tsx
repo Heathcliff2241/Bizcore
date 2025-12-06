@@ -18,6 +18,7 @@ interface CTASectionProps {
     height?: number
   }
   storefront?: StorefrontContext
+  fullWidth?: boolean
 }
 
 export function CTASection({
@@ -31,6 +32,7 @@ export function CTASection({
   height,
   size,
   storefront
+  , fullWidth = true
 }: CTASectionProps) {
   const resolvedHeight = height ?? size?.height
   const basePadding = resolvedHeight ? Math.max(24, Math.min(resolvedHeight / 4, 96)) : 80
@@ -50,10 +52,10 @@ export function CTASection({
 
   return (
     <section 
-      className="px-8 md:px-16 lg:px-24 w-full"
+      className={`w-full ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}
       style={sectionStyle}
     >
-      <div className="w-full max-w-7xl mx-auto text-center">
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} text-center`}>
         <h2 
           className="text-4xl md:text-5xl font-bold mb-6"
           style={{ color: textColor }}

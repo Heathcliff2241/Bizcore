@@ -1,0 +1,725 @@
+================================================================================
+            BizCore: Complete User Flow & Authentication Journey
+                    Start → Login/Signup → Role-Based Dashboard
+================================================================================
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         🔑 UNIFIED ENTRY POINT                              │
+│                    (All Users Start Here: bizcore.test)                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                                  [ Home ]
+                                     │
+                  ┌──────────────────┼──────────────────┐
+                  │                  │                  │
+                  ▼                  ▼                  ▼
+         ┌─────────────────┐ ┌──────────────┐ ┌──────────────┐
+         │   FIRST TIME?   │ │  RETURNING?  │ │  CUSTOMER?   │
+         │  (New Account)  │ │  (Existing)  │ │ (Just Browse)│
+         └────────┬────────┘ └──────┬───────┘ └──────┬───────┘
+                  │                  │                │
+                  ▼                  ▼                ▼
+         ┌──────────────────────────────────────────────────────┐
+         │          [/auth/signup OR /auth/signin]              │
+         │                 (NextAuth.js Form)                   │
+         └──────────────────────────────────────────────────────┘
+                  │
+     ┌────────────┼────────────┐
+     │            │            │
+     ▼            ▼            ▼
+  SIGNUP      SIGNIN        BROWSE
+    │            │          (No Auth)
+    │            │              │
+    │            │              ▼
+    │            │         [/storefront/...]
+    │            │         (Public Pages)
+    │            │              │
+    │            └──────┬───────┘
+    │                   │
+    └───────────────────┤
+                        │
+         ┌──────────────▼──────────────┐
+         │    EMAIL VALIDATION CHECK   │
+         │   (Prisma: Find User Email) │
+         │  If Exists → Signin Only    │
+         │  If New → Create Account    │
+         └──────────────┬──────────────┘
+                        │
+                 ┌──────▼──────┐
+                 │   VALID?    │
+                 └──┬────────┬─┘
+              YES   │        │   NO
+                    ▼        ▼
+                  [Next]  [Error]
+                    │        │
+                    │        ▼
+                    │   ┌──────────────┐
+                    │   │ Show Errors: │
+                    │   │ • Invalid fmt│
+                    │   │ • Empty flds │
+                    │   │ • Too short  │
+                    │   └──────┬───────┘
+                    │          │
+                    │    [Back to Form]
+                    │
+     ┌──────────────▼──────────────┐
+     │   PASSWORD VALIDATION       │
+     │ • Min 8 chars               │
+     │ • Number + Special char     │
+     │ • Not empty                 │
+     └──────────────┬──────────────┘
+                    │
+              ┌─────▼─────┐
+              │  VALID?   │
+              └─┬────────┬─┘
+            YES │        │ NO
+                ▼        ▼
+              [Next] [Error: Show Rules]
+                │        │
+                │    [Back to Form]
+                │
+     ┌──────────▼───────────┐
+     │ HASH PASSWORD        │
+     │ (bcryptjs.hash())    │
+     └──────────┬───────────┘
+                │
+     ┌──────────▼────────────────────────┐
+     │  CREATE USER IN DATABASE          │
+     │  Prisma User Model:               │
+     │  • id (UUID)                      │
+     │  • email (unique)                 │
+     │  • passwordHash                   │
+     │  • role (admin|tenant|employee)   │
+     │  • createdAt                      │
+     │  • status (active|inactive)       │
+     └──────────┬─────────────────────────┘
+                │
+         ┌──────▼──────┐
+         │ Success?    │
+         └──┬─────────┬─┘
+        YES │         │ NO (duplicate email, etc)
+            ▼         ▼
+         [Next]   [Error + Retry]
+            │         │
+            │    [Back to Form]
+            │
+     ┌──────▼──────────────────┐
+     │ SEND CONFIRMATION EMAIL │
+     │ (Nodemailer)            │
+     │ • Welcome message       │
+     │ • Account details       │
+     │ • Next steps            │
+     └──────┬───────────────────┘
+            │
+     ┌──────▼──────────────────┐
+     │ JWT SESSION CREATED     │
+     │ (NextAuth.js)           │
+     │                         │
+     │ Session contains:       │
+     │ • user.id               │
+     │ • user.email            │
+     │ • user.role             │
+     │ • user.tenantId         │
+     │ • token                 │
+     │ • expires (24h)         │
+     └──────┬───────────────────┘
+            │
+     ┌──────▼─────────────────────────────────────┐
+     │ REDIRECT TO ROLE-BASED DASHBOARD           │
+     │                                             │
+     │ IF role = "admin" → /admin/dashboard       │
+     │ IF role = "tenant" → /dashboard/{subdomain}│
+     │ IF role = "employee" → /pos                │
+     │ IF role = "customer" → /storefront/{subdom}│
+     └─────────────────────────────────────────────┘
+
+
+================================================================================
+                   ADMIN FLOW (Super Admin Dashboard)
+================================================================================
+
+                       ┌─────────────────────────┐
+                       │ Admin Home              │
+                       │ /admin/dashboard        │
+                       │                         │
+                       │ • Business Metrics      │
+                       │ • Revenue Chart         │
+                       │ • Tenant Health         │
+                       │ • Activity Feed         │
+                       └────────────┬────────────┘
+                                    │
+                ┌───────────────────┼───────────────────┐
+                │                   │                   │
+                ▼                   ▼                   ▼
+         ┌─────────────┐    ┌───────────────┐  ┌──────────────┐
+         │   USERS     │    │   TENANTS     │  │ SUBSCRIPTIONS│
+         │ Management  │    │ Management    │  │ & Billing    │
+         │             │    │               │  │              │
+         │ • View All  │    │ • View All    │  │ • Plans      │
+         │ • Create    │    │ • Create      │  │ • Invoices   │
+         │ • Edit      │    │ • Edit        │  │ • Revenue    │
+         │ • Delete    │    │ • Delete      │  │ • Metrics    │
+         │ • Roles     │    │ • Status      │  │ • Upgrade    │
+         │             │    │ • Onboarding  │  │ • Downgrade  │
+         └─────────────┘    └───────────────┘  └──────────────┘
+                │                   │                   │
+                └───────────┬───────┴─────────┬────────┘
+                            │                 │
+                   ┌────────▼────────┐   ┌───▼──────────┐
+                   │  ANALYTICS      │   │  ACTIVITY    │
+                   │                 │   │  LOGS        │
+                   │ • Sales Trends  │   │              │
+                   │ • Top Products  │   │ • User Login │
+                   │ • Order Stats   │   │ • Tenant Act │
+                   │ • Revenue       │   │ • API Calls  │
+                   │ • PDF Export    │   │ • Errors     │
+                   └─────────────────┘   └──────────────┘
+
+
+================================================================================
+                 TENANT FLOW (Business Owner Dashboard)
+================================================================================
+
+                   ┌──────────────────────────────┐
+                   │ Tenant Dashboard             │
+                   │ /dashboard/{subdomain}       │
+                   │                              │
+                   │ • Sales Overview             │
+                   │ • Recent Orders              │
+                   │ • Product Performance        │
+                   │ • Quick Actions              │
+                   └──────────────┬───────────────┘
+                                  │
+                  ┌───────────────┼───────────────┐
+                  │               │               │
+                  ▼               ▼               ▼
+           ┌─────────────┐ ┌────────────┐ ┌───────────┐
+           │  PRODUCTS   │ │  ORDERS    │ │ STOREFRONT│
+           │ Management  │ │ Management │ │ Designer  │
+           │             │ │            │ │           │
+           │ • List      │ │ • All Ord. │ │ • Pages   │
+           │ • Create    │ │ • Process  │ │ • Publish │
+           │ • Edit      │ │ • Fulfill  │ │ • Preview │
+           │ • Stock     │ │ • Cancel   │ │ • Analytics│
+           │ • Pricing   │ │ • PDF      │ │ • Settings│
+           │ • Variants  │ │ • Email    │ │           │
+           │ • Bulk Ops  │ │            │ │ (Launch)  │
+           │             │ │            │ │ BrandStudio
+           └─────────────┘ └────────────┘ └───────────┘
+                  │               │               │
+                  └───────┬───────┴───────┬───────┘
+                          │               │
+                   ┌──────▼────────┐ ┌───▼────────────┐
+                   │  ANALYTICS    │ │  SUBSCRIPTIONS │
+                   │               │ │                │
+                   │ • Sales Chart │ │ • Plan Details │
+                   │ • Top Sellers │ │ • Renewal Date │
+                   │ • Revenue     │ │ • Upgrade      │
+                   │ • Customers   │ │ • Payment Meth │
+                   │ • Trends      │ │ • Billing Hist │
+                   │ • Reports     │ │                │
+                   └───────────────┘ └────────────────┘
+
+
+===============================================================================
+              EMPLOYEE FLOW (Point of Sale / POS System)
+===============================================================================
+
+                      ┌──────────────────────┐
+                      │  POS Interface       │
+                      │  /pos                │
+                      │                      │
+                      │ • Dashboard          │
+                      │ • Quick Product View │
+                      │ • Cart System        │
+                      └──────────┬───────────┘
+                                 │
+               ┌─────────────────┼─────────────────┐
+               │                 │                 │
+               ▼                 ▼                 ▼
+        ┌────────────┐   ┌────────────┐  ┌────────────┐
+        │   CREATE   │   │   ACTIVE   │  │  TRANSACTION
+        │  NEW ORDER │   │  ORDERS    │  │  HISTORY   │
+        │            │   │            │  │            │
+        │ • Scan SKU │   │ • View All │  │ • Today's  │
+        │ • Search   │   │ • Check    │  │  Sales     │
+        │ • Add Qty  │   │   Stock    │  │ • Completed│
+        │ • Add Cust │   │ • Status   │  │ • Cancelled│
+        │ • Discount │   │ • Edit     │  │ • Returns  │
+        │ • Payment  │   │ • Cancel   │  │            │
+        │ • Print    │   │            │  │ (Read-only)│
+        │   Invoice  │   │            │  │            │
+        └────────────┘   └────────────┘  └────────────┘
+               │                 │                 │
+               └────────┬────────┴────────┬────────┘
+                        │                 │
+                ┌───────▼────────┐  ┌────▼──────────┐
+                │  INVENTORY     │  │  REPORTS      │
+                │                │  │               │
+                │ • Stock Levels │  │ • Daily Sales │
+                │ • Low Stock    │  │ • Top Items   │
+                │ • Categories   │  │ • Payment Type│
+                │ • Search       │  │ • Staff Perf  │
+                │ • Quick Filter │  │               │
+                └────────────────┘  └───────────────┘
+
+
+================================================================================
+              CUSTOMER FLOW (Tenant Storefront)
+================================================================================
+
+                  ┌──────────────────────────────┐
+                  │ Tenant Storefront            │
+                  │ /storefront/{subdomain}      │
+                  │                              │
+                  │ (Publicly Customized Pages)  │
+                  │ • Hero Section               │
+                  │ • Product Grid               │
+                  │ • Footer with Links          │
+                  │ • SEO Optimized              │
+                  └──────────────┬───────────────┘
+                                 │
+                 ┌───────────────┼───────────────┐
+                 │               │               │
+                 ▼               ▼               ▼
+          ┌────────────┐  ┌────────────┐ ┌──────────┐
+          │  BROWSE    │  │   SEARCH   │ │ FEATURED │
+          │ PRODUCTS   │  │ & FILTER   │ │ PRODUCTS │
+          │            │  │            │ │          │
+          │ • Grid View│  │ • By Price │ │ • New    │
+          │ • Product  │  │ • By Cat   │ │ • Sale   │
+          │   Details  │  │ • By Name  │ │ • Top    │
+          │ • Images   │  │ • Sort     │ │ • Recent │
+          │ • Ratings  │  │ • Reviews  │ │          │
+          │ • Stock    │  │            │ │          │
+          │            │  │            │ │          │
+          └────────────┘  └────────────┘ └──────────┘
+                 │               │               │
+                 └───────┬───────┴───────┬───────┘
+                         │               │
+                  ┌──────▼────────┐ ┌───▼───────┐
+                  │  ADD TO CART  │ │ WISHLIST  │
+                  │               │ │ (Optional)│
+                  │ • Quantity    │ │           │
+                  │ • Variants    │ │ • Save    │
+                  │ • Options     │ │ • View    │
+                  │ • Continue    │ │ • Share   │
+                  │   Shopping    │ │           │
+                  └──────┬────────┘ └───────────┘
+                         │
+                  ┌──────▼───────────┐
+                  │  VIEW CART       │
+                  │                  │
+                  │ • Items List     │
+                  │ • Quantities     │
+                  │ • Prices         │
+                  │ • Subtotal       │
+                  │ • Edit/Remove    │
+                  │ • Proceed        │
+                  └────────┬─────────┘
+                           │
+                  ┌────────▼──────────┐
+                  │ CHECKOUT          │
+                  │ (requires LOGIN)  │
+                  └────────┬──────────┘
+                           │
+         ┌─────────────────┼──────────────────┐
+         │                 │                  │
+         ▼                 ▼                  ▼
+    [LOGIN]          [SIGNUP]          [GUEST]
+     (Existing)      (New Customer)    (No Account)
+         │                 │                  │
+         └─────────┬───────┴──────────┬───────┘
+                   │                  │
+            ┌──────▼──────────────────▼───┐
+            │ ENTER SHIPPING ADDRESS      │
+            │                             │
+            │ • Full Name                 │
+            │ • Address                   │
+            │ • City / Region             │
+            │ • Postal Code               │
+            │ • Phone                     │
+            └──────────┬──────────────────┘
+                       │
+            ┌──────────▼────────────┐
+            │ SELECT SHIPPING METHOD│
+            │                       │
+            │ • Standard            │
+            │ • Express             │
+            │ • Overnight           │
+            │ (Show Cost & Time)    │
+            └──────────┬────────────┘
+                       │
+            ┌──────────▼────────────────────┐
+            │ ENTER PAYMENT INFORMATION     │
+            │                               │
+            │ • Card Number (Stripe/Pay)   │
+            │ • Expiry                      │
+            │ • CVC                         │
+            │ • Name                        │
+            │ • Billing Address             │
+            │ (Encrypted)                   │
+            └──────────┬─────────────────────┘
+                       │
+            ┌──────────▼────────────────────┐
+            │ PAYMENT PROCESSING            │
+            │ (Gateway Integration)         │
+            │                               │
+            │ ✓ Validate Card              │
+            │ ✓ Check Funds                │
+            │ ✓ Process Transaction        │
+            │ ✓ Confirm Payment            │
+            └──────────┬─────────────────────┘
+                       │
+                    ┌──▼──┐
+                    │OK? │
+                    └┬───┴┬┐
+                  YES│    │NO
+                    ▼     ▼
+                 [ORDER] [ERROR]
+                  CREATE  │
+                    │     └─► [Retry Payment]
+                    │            │
+                    ▼            [Back]
+         ┌──────────────────────┐
+         │ ORDER CONFIRMATION   │
+         │                      │
+         │ • Order #            │
+         │ • Items              │
+         │ • Total              │
+         │ • Shipping Address   │
+         │ • Estimated Delivery │
+         │ • Confirmation Email │
+         └──────────┬───────────┘
+                    │
+         ┌──────────▼─────────────┐
+         │ ORDER TRACKING         │
+         │ (/my-orders)           │
+         │                        │
+         │ • Order Status         │
+         │ • Items Status         │
+         │ • Tracking Number      │
+         │ • Estimated Arrival    │
+         │ • Contact Support      │
+         │ • Return Item          │
+         │ • Leave Review         │
+         └────────────────────────┘
+
+
+================================================================================
+                    SESSION & SECURITY FLOW
+================================================================================
+
+                    ┌─────────────────────┐
+                    │  LOGIN SUCCESSFUL   │
+                    │  JWT Token Created  │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────────┐
+                    │ SESSION DATA STORED    │
+                    │ (HTTP-Only Cookie)     │
+                    │                        │
+                    │ Contains:              │
+                    │ • user.id              │
+                    │ • user.email           │
+                    │ • user.role            │
+                    │ • user.tenantId        │
+                    │ • user.subdomain       │
+                    │ • Expires: 24 hours    │
+                    │ • Signature: Signed    │
+                    └──────────┬─────────────┘
+                               │
+                    ┌──────────▼──────────────┐
+                    │ MIDDLEWARE VALIDATION  │
+                    │ (On Each Request)      │
+                    │                        │
+                    │ • Check Token Exists   │
+                    │ • Verify Signature     │
+                    │ • Check Expiration     │
+                    │ • Validate User ID     │
+                    └──────────┬─────────────┘
+                               │
+                        ┌──────▼──────┐
+                        │   VALID?    │
+                        └──┬────────┬─┘
+                       YES │        │ NO
+                           ▼        ▼
+                      [ALLOW]  [REDIRECT TO
+                       │        LOGIN]
+                       │         │
+                       │    [Clear Session]
+                       │    [Clear Cookie]
+                       │         │
+                    ┌──▼─────────▼────┐
+                    │ ROUTE PROTECTION│
+                    │ (Role-Based)    │
+                    │                 │
+                    │ /admin/* →      │
+                    │  role = "admin" │
+                    │                 │
+                    │ /dashboard/* → │
+                    │  role = "tenant"│
+                    │                 │
+                    │ /pos →          │
+                    │  role =         │
+                    │  "employee"     │
+                    │                 │
+                    │ /storefront/* → │
+                    │  public OR      │
+                    │  authenticated  │
+                    └────────┬────────┘
+                             │
+                      ┌──────▼──────┐
+                      │  AUTHORIZED?│
+                      └──┬────────┬─┘
+                     YES │        │ NO
+                         ▼        ▼
+                      [ALLOW]  [403
+                       │      FORBIDDEN]
+                       │        │
+                       ▼        ▼
+                    [Render   [Error
+                     Page]     Page]
+
+
+================================================================================
+                    LOGOUT FLOW
+================================================================================
+
+                    ┌───────────────────┐
+                    │ User Clicks Logout│
+                    └─────────┬─────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ POST /auth/logout  │
+                    │ (NextAuth.js)      │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────────┐
+                    │ CLEAR SESSION         │
+                    │                       │
+                    │ • Remove JWT Token    │
+                    │ • Delete Cookie       │
+                    │ • Clear Database Sess │
+                    │ • Clear Memory Cache  │
+                    └─────────┬──────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │ REDIRECT TO HOME   │
+                    │ /                  │
+                    │                    │
+                    │ (Public Pages Only)│
+                    └────────────────────┘
+
+
+================================================================================
+                    ERROR & VALIDATION FLOWS
+================================================================================
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ AUTHENTICATION ERRORS                                                      │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  SIGNUP ERRORS:                    │ SIGNIN ERRORS:                       │
+│  ━━━━━━━━━━━━━━━━━                │ ━━━━━━━━━━━━━━━━━                  │
+│  • Email already exists            │ • User not found                     │
+│  • Invalid email format            │ • Wrong password                     │
+│  • Password too weak               │ • Account inactive                   │
+│  • Password mismatch               │ • Too many login attempts           │
+│  • Empty required fields           │   (Rate Limited: 5/15min)           │
+│  • Server error                    │ • Session expired                    │
+│                                    │ • Invalid token                      │
+│                                    │ • Server error                       │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ ORDER VALIDATION ERRORS                                                    │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  • Out of stock items                                                     │
+│  • Invalid product ID                                                     │
+│  • Missing shipping address                                               │
+│  • Invalid payment details                                                │
+│  • Order total mismatch                                                   │
+│  • Customer not found                                                     │
+│  • Tenant inactive                                                        │
+│  • Payment declined                                                       │
+│  • Cart empty                                                             │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                    RATE LIMITING
+================================================================================
+
+                     ┌──────────────────┐
+                     │ USER ACTION      │
+                     │ (Login Attempt)  │
+                     └────────┬─────────┘
+                              │
+                     ┌────────▼──────────────┐
+                     │ CHECK RATE LIMIT      │
+                     │ (Redis/In-Memory)     │
+                     │                       │
+                     │ 5 Attempts / 15 min   │
+                     │ Per IP or User        │
+                     └────────┬──────────────┘
+                              │
+                       ┌──────▼──────┐
+                       │ WITHIN LIMIT?│
+                       └──┬────────┬─┘
+                      YES │        │ NO
+                          ▼        ▼
+                      [ALLOW]  [BLOCK]
+                       │        │
+                       │        └──► ┌──────────────┐
+                       │             │ Show Error:  │
+                       │             │ "Too many    │
+                       │             │ attempts.    │
+                       │             │ Try again in │
+                       │             │ X minutes"   │
+                       │             └──────────────┘
+                       │
+                       ▼
+                    [Increment
+                     Counter]
+
+
+================================================================================
+                        DATA PERSISTENCE FLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ USER DATA (Prisma Models)                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  User Table:                         Tenant Table:                         │
+│  • id (UUID)                         • id (UUID)                           │
+│  • email (unique)                    • name                                │
+│  • passwordHash                      • subdomain (unique)                  │
+│  • role (enum)                       • owner_id (FK)                       │
+│  • tenantId (FK)                     • plan_id (FK)                        │
+│  • createdAt                         • createdAt                           │
+│  • status                            • settings (JSON)                     │
+│                                      │                                     │
+│  Product Table:                      │ Order Table:                        │
+│  • id (UUID)                         │ • id (UUID)                         │
+│  • tenantId (FK)                     │ • customerId (FK)                   │
+│  • name                              │ • tenantId (FK)                     │
+│  • sku (unique)                      │ • items (JSON)                      │
+│  • price                             │ • total                             │
+│  • stock                             │ • status (enum)                     │
+│  • image                             │ • createdAt                         │
+│  • variants (JSON)                   │ • shippingAddr (JSON)               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                    COMPLETE FLOW SUMMARY
+================================================================================
+
+START
+  │
+  ├─► [Home/Landing]
+  │
+  ├─► [Choose Path]
+  │   ├─► SIGNUP
+  │   │   ├─► Email/Password Validation
+  │   │   ├─► Account Creation
+  │   │   ├─► JWT Session
+  │   │   └─► Assign Role
+  │   │
+  │   ├─► SIGNIN
+  │   │   ├─► Email/Password Validation
+  │   │   ├─► Rate Limiting Check
+  │   │   ├─► JWT Session
+  │   │   └─► Fetch Role
+  │   │
+  │   └─► BROWSE (No Auth)
+  │       └─► Redirect to Tenant Storefront
+  │
+  ├─► [Role-Based Redirect]
+  │   ├─► ADMIN (role = admin)
+  │   │   └─► /admin/dashboard
+  │   │
+  │   ├─► TENANT (role = tenant)
+  │   │   └─► /dashboard/{subdomain}
+  │   │
+  │   ├─► EMPLOYEE (role = employee)
+  │   │   └─► /pos
+  │   │
+  │   └─► CUSTOMER (role = customer)
+  │       └─► /storefront/{subdomain}
+  │
+  ├─► [User Actions Based on Role]
+  │
+  └─► [Logout]
+      ├─► Clear Session
+      ├─► Clear Cookies
+      └─► Redirect to Home
+
+END
+
+
+================================================================================
+                            KEY FEATURES
+================================================================================
+
+✅ SECURITY
+   • Password hashing (bcryptjs)
+   • JWT token signing
+   • HTTP-only cookies
+   • Rate limiting
+   • CORS protection
+   • Session validation
+   • Role-based access control
+
+✅ VALIDATION
+   • Email format validation
+   • Password strength rules
+   • Required field checks
+   • Duplicate email detection
+   • Input sanitization
+   • Error messages (user-friendly)
+
+✅ MULTI-TENANCY
+   • Tenant isolation via tenantId
+   • Subdomain-based routing
+   • Role-based permissions
+   • Data access control
+
+✅ RESPONSIVENESS
+   • Mobile-friendly forms
+   • Responsive dashboards
+   • Touch-friendly interfaces
+   • Progressive enhancement
+
+✅ ERROR HANDLING
+   • User-friendly error messages
+   • Proper HTTP status codes
+   • Error logging
+   • Recovery suggestions
+   • Retry mechanisms
+
+
+================================================================================
+                      TECHNOLOGY REFERENCES
+================================================================================
+
+AUTHENTICATION:     NextAuth.js 4.x + JWT
+VALIDATION:         Client-side + Server-side (Zod/Custom)
+HASHING:            bcryptjs 3.x
+RATE LIMITING:      Custom middleware
+DATABASE:           Prisma ORM + PostgreSQL
+SESSION STORAGE:    HTTP-Only Cookies (24hr)
+ENCRYPTION:         NextAuth JWT signing
+ERROR TRACKING:     Server-side logging
+
+
+================================================================================
+                        LAST UPDATED: December 4, 2025
+                    For Complete System: See BIZCORE_SYSTEM_FLOWCHART.txt
+================================================================================

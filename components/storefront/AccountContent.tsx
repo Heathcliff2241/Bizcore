@@ -1,12 +1,11 @@
-import Link from 'next/link'
-import type { StorefrontContext } from './types'
-import { resolveStorefrontHref } from './utils/links'
+'use client'
 
-interface AccountSection {
-	title: string
-	description?: string
-	href?: string
-}
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
+import type { StorefrontContext } from './types'
+import { ProfileContent } from './account/ProfileContent'
+import { OrdersContent } from './account/OrdersContent'
+import { AddressesContent } from './account/AddressesContent'
 
 interface AccountContentProps {
 	backgroundColor?: string
@@ -15,25 +14,10 @@ interface AccountContentProps {
 	padding?: number
 	heading?: string
 	description?: string
-	sections?: AccountSection[]
-	emptyState?: string
+	activeTab?: string
+	customer?: any
 	storefront?: StorefrontContext
 }
-
-const DEFAULT_SECTIONS: AccountSection[] = [
-	{
-		title: 'Profile Details',
-		description: 'Update your personal information and contact details.'
-	},
-	{
-		title: 'Order History',
-		description: 'Track past orders and download receipts.'
-	},
-	{
-		title: 'Saved Addresses',
-		description: 'Manage delivery locations for faster checkout.'
-	}
-]
 
 export function AccountContent({
 	backgroundColor = '#ffffff',
@@ -42,15 +26,36 @@ export function AccountContent({
 	padding = 32,
 	heading = 'Account Overview',
 	description = 'You are signed in as customer@example.com',
-	sections = DEFAULT_SECTIONS,
-	emptyState = 'Nothing to show here yet.',
+	activeTab = 'profile',
+	customer,
 	storefront
 }: AccountContentProps) {
-	const hasSections = sections.length > 0
+	const searchParams = useSearchParams()
+	const [tab, setTab] = useState(activeTab)
+
+	useEffect(() => {
+		const tabParam = searchParams.get('tab')
+		if (tabParam) {
+			setTab(tabParam)
+		}
+	}, [searchParams])
+
+	const renderContent = () => {
+		switch (tab) {
+			case 'profile':
+				return <ProfileContent customer={customer} />
+			case 'orders':
+				return <OrdersContent storefront={storefront} />
+			case 'addresses':
+				return <AddressesContent customer={customer} />
+			default:
+				return <ProfileContent customer={customer} />
+		}
+	}
 
 	return (
 		<section
-			className="flex h-full w-full flex-col gap-6"
+			className="flex flex-col gap-6 w-full"
 			style={{
 				backgroundColor,
 				borderRadius,
@@ -58,55 +63,14 @@ export function AccountContent({
 				padding
 			}}
 		>
-			<header className="space-y-1">
+			<header className="space-y-1 pb-4 border-b border-slate-200">
 				<h2 className="text-2xl font-semibold text-slate-900">{heading}</h2>
 				<p className="text-sm text-slate-500">{description}</p>
 			</header>
 
-			{hasSections ? (
-				<div className="grid gap-4 sm:grid-cols-2">
-					{sections.map(section => {
-						const resolved = section.href
-							? resolveStorefrontHref(section.href, storefront)
-							: null
-
-						return (
-							<article
-								key={section.title}
-								className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:shadow-sm"
-							>
-								<h3 className="text-base font-semibold text-slate-900">{section.title}</h3>
-								{section.description && (
-									<p className="mt-2 text-sm text-slate-500">{section.description}</p>
-								)}
-								{resolved && (
-									resolved.isExternal ? (
-										<a
-											className="mt-4 inline-flex items-center text-sm font-medium text-slate-900 underline"
-											href={resolved.href}
-											target="_blank"
-											rel="noopener noreferrer"
-										>
-											Manage
-										</a>
-									) : (
-										<Link
-											className="mt-4 inline-flex items-center text-sm font-medium text-slate-900 underline"
-											href={resolved.href}
-										>
-											Manage
-										</Link>
-									)
-								)}
-							</article>
-						)
-					})}
-				</div>
-			) : (
-				<div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-400">
-					{emptyState}
-				</div>
-			)}
+			<div>
+				{renderContent()}
+			</div>
 		</section>
 	)
 }

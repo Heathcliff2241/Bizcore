@@ -3,7 +3,27 @@ import { getServerSession } from 'next-auth/next'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logActivity } from '@/lib/activityLogger'
 import type { Prisma } from '@prisma/client'
+
+// Revalidate the storefront page cache with retry and collect status
+async function revalidateWithRetry(path: string, attempts = 3, delay = 250): Promise<{ success: boolean; attempts: number; error?: string }> {
+  let lastError: Error | null = null
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      revalidatePath(path)
+      console.log(`Revalidated (attempt ${i}): ${path}`)
+      return { success: true, attempts: i }
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`Revalidate attempt ${i} failed for ${path}:`, err)
+      // Try again after a short delay
+      await new Promise((r) => setTimeout(r, delay * i))
+    }
+  }
+  console.error('All revalidation attempts failed for:', path, lastError)
+  return { success: false, attempts, error: lastError?.message || String(lastError) }
+}
 
 type RouteParamsResult = { id: string } | Promise<{ id: string }>
 
@@ -73,19 +93,26 @@ export async function POST(
       }
     })
 
-    // Revalidate the storefront page cache
-    try {
-      revalidatePath(`/storefront/${tenant.subdomain}/${page.slug}`)
-      console.log(`Revalidated: /storefront/${tenant.subdomain}/${page.slug}`)
-    } catch (revalidateError) {
-      console.error('Error revalidating path:', revalidateError)
-      // Don't fail the publish if revalidation fails
-    }
+    // Log the activity
+    await logActivity({
+      userId: session.user.id,
+      tenantId,
+      action: 'PAGE_PUBLISHED',
+      details: {
+        pageId,
+        pageTitle: publishedPage.title,
+        slug: page.slug,
+        revalidated: true
+      }
+    })
+
+    const revalidateResult = await revalidateWithRetry(`/storefront/${tenant.subdomain}/${page.slug}`)
 
     return NextResponse.json({
       success: true,
       data: publishedPage,
-      message: 'Page published successfully'
+      message: 'Page published successfully',
+      revalidation: revalidateResult
     })
   } catch (error) {
     console.error('Error publishing page:', error)

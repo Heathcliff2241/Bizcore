@@ -2,33 +2,57 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logActivity } from '@/lib/activityLogger'
 
-// CORS headers for Vite dev server
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'http://localhost:5174',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Credentials': 'true',
+// CORS headers - allow BrandStudio origins (both bizcore.test and localhost variants)
+function getCorsHeaders(request: NextRequest): Record<string, string> {
+  const origin = request.headers.get('origin') || ''
+  
+  // If no origin header, this is a same-origin request (from the same domain/port)
+  // Don't apply CORS restrictions in this case
+  if (!origin) {
+    return {}
+  }
+  
+  // Allowed origins - support bizcore.test and localhost variants
+  const allowedOrigins = [
+    'http://bizcore.test',
+    'http://localhost:5174',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost',
+  ]
+  
+  const isAllowed = allowedOrigins.some(allowed => 
+    origin === allowed || origin.startsWith(allowed)
+  )
+  
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  } as Record<string, string>
 }
 
 // Handle OPTIONS request for CORS preflight
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders })
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, { headers: getCorsHeaders(request) })
 }
 
 // GET /api/pages - Get all pages for tenant
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: 'Unauthorized' }, { status: 401, headers: getCorsHeaders(request) })
     }
 
     const { searchParams } = new URL(request.url)
     const tenantId = searchParams.get('tenantId')
 
     if (!tenantId) {
-      return NextResponse.json({ message: 'Tenant ID is required' }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ message: 'Tenant ID is required' }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     const pages = await prisma.pageDesign.findMany({
@@ -42,12 +66,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: pages
-    }, { headers: corsHeaders })
+    }, { headers: getCorsHeaders(request) })
   } catch (error) {
     console.error('Error fetching pages:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to fetch pages' },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(request) }
     )
   }
 }
@@ -114,15 +138,29 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Log the activity
+    await logActivity({
+      userId: session.user.id,
+      tenantId: parseInt(tenantId),
+      action: 'PAGE_CREATED',
+      details: {
+        pageId: page.id,
+        pageTitle: title,
+        slug,
+        template,
+        isDraft: isDraft !== undefined ? isDraft : true
+      }
+    })
+
     return NextResponse.json({
       success: true,
       data: page
-    }, { status: 201, headers: corsHeaders })
+    }, { status: 201, headers: getCorsHeaders(request) })
   } catch (error) {
     console.error('Error creating page:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to create page' },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(request) }
     )
   }
 }

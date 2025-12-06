@@ -1,4 +1,3 @@
-// Prisma schema for BizCore (multi-tenant) - Converted from MySQL
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,6 +5,722 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                          Int                  @id @default(autoincrement())
+  firstName                   String
+  lastName                    String
+  email                       String               @unique
+  password                    String
+  role                        UserRole             @default(user)
+  isActive                    Boolean              @default(true)
+  emailVerified               Boolean              @default(false)
+  emailVerificationToken      String?
+  passwordResetToken          String?
+  passwordResetExpires        DateTime?
+  lastLogin                   DateTime?
+  loginAttempts               Int                  @default(0)
+  lockUntil                   DateTime?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @default(now())
+  emailVerificationAttempts   Int                  @default(0)
+  emailVerificationOtp        String?
+  emailVerificationOtpExpires DateTime?
+  activityLogs                ActivityLog[]
+  orderStatusHistories        OrderStatusHistory[]
+  orders                      Order[]              @relation("OrderCustomer")
+  pageDesignRevisions         PageDesignRevision[] @relation("PageDesignRevisionUser")
+  pageRevisions               PageRevision[]
+  pages                       Page[]
+  projects                    Project[]            @relation("ProjectUser")
+  tenantRegistrations         TenantRegistration[]
+  tenantUsers                 TenantUser[]
+  ownedTenants                Tenant[]             @relation("TenantOwner")
+
+  @@map("users")
+}
+
+model Tenant {
+  id                    Int                    @id @default(autoincrement())
+  name                  String
+  subdomain             String                 @unique
+  domain                String?
+  description           String?
+  ownerId               Int
+  logo                  String?
+  favicon               String?
+  settings              Json?
+  isActive              Boolean                @default(true)
+  isPremium             Boolean                @default(false)
+  subscriptionPlan      SubscriptionPlan       @default(free)
+  subscriptionExpires   DateTime?
+  customCSS             String?
+  googleAnalytics       String?
+  facebookPixel         String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+  industry              String?
+  primaryColor          String?                @default("#1e40af")
+  secondaryColor        String?                @default("#059669")
+  activityLogs          ActivityLog[]
+  adminNotifications    AdminNotification[]
+  billingPreference     BillingPreference?
+  categories            Category[]
+  customers             Customer[]
+  employees             Employee[]
+  ingredients           Ingredient[]
+  inventoryTransactions InventoryTransaction[]
+  media                 Media[]
+  orders                Order[]
+  pageDesigns           PageDesign[]
+  pages                 Page[]
+  products              Product[]
+  storefrontSettings    StorefrontSettings?
+  subscription          Subscription?
+  tenantUsers           TenantUser[]
+  owner                 User                   @relation("TenantOwner", fields: [ownerId], references: [id])
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id          Int            @id @default(autoincrement())
+  tenantId    Int
+  userId      Int
+  role        TenantUserRole @default(viewer)
+  permissions Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now())
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  tenantId  Int?
+  action    String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_log")
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  name        String
+  description String?
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@index([tenantId])
+  @@map("categories")
+}
+
+model Customer {
+  id                     Int       @id @default(autoincrement())
+  tenantId               Int
+  firstName              String
+  lastName               String
+  email                  String?
+  phone                  String?
+  address                Json?
+  notes                  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now())
+  emailVerificationToken String?
+  emailVerified          Boolean   @default(false)
+  isActive               Boolean   @default(true)
+  lastLogin              DateTime?
+  lockUntil              DateTime?
+  loginAttempts          Int       @default(0)
+  password               String?
+  passwordResetExpires   DateTime?
+  passwordResetToken     String?
+  tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders                 Order[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("customers")
+}
+
+model Ingredient {
+  id                    Int                    @id @default(autoincrement())
+  tenantId              Int
+  name                  String
+  description           String?
+  unit                  String                 @default("pieces")
+  currentStock          Float                  @default(0)
+  reservedStock         Float                  @default(0)
+  minStock              Float                  @default(0)
+  costPerUnit           Float                  @default(0)
+  supplier              String?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryTransactions InventoryTransaction[]
+  productIngredients    ProductIngredient[]
+
+  @@index([tenantId])
+  @@map("ingredients")
+}
+
+model InventoryTransaction {
+  id           Int        @id @default(autoincrement())
+  tenantId     Int
+  ingredientId Int
+  type         String
+  quantity     Float
+  reason       String?
+  cost         Float?
+  performedBy  Int?
+  createdAt    DateTime   @default(now())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([ingredientId])
+  @@map("inventory_transactions")
+}
+
+model Media {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  filename  String
+  path      String
+  url       String
+  type      String
+  size      Int
+  alt       String?
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("media")
+}
+
+model Order {
+  id                   Int                  @id @default(autoincrement())
+  tenantId             Int
+  customerId           Int?
+  userId               Int?
+  orderNumber          String               @unique
+  status               String               @default("pending")
+  orderType            String               @default("dine-in")
+  total                Float                @default(0)
+  tax                  Float                @default(0)
+  discount             Float                @default(0)
+  notes                String?
+  deliveryAddress      String?              @db.Text
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @default(now())
+  employeeId           Int?
+  paymentMethod        String?
+  amountPaid           Float                @default(0)
+  paymentStatus        PaymentStatus        @default(unpaid)
+  paymentProof         String?              @db.Text
+  orderItems           OrderItem[]
+  orderStatusHistories OrderStatusHistory[]
+  customer             Customer?            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  employee             Employee?            @relation("OrderEmployee", fields: [employeeId], references: [id])
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                 User?                @relation("OrderCustomer", fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        Int             @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  variantId Int?
+  quantity  Int
+  price     Float
+  notes     String?
+  createdAt DateTime        @default(now())
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  userId    Int
+  status    String
+  notes     String?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+model Page {
+  id            Int            @id @default(autoincrement())
+  tenantId      Int?
+  userId        Int
+  title         String
+  slug          String
+  content       String?
+  isPublished   Boolean        @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now())
+  pageRevisions PageRevision[]
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("pages")
+}
+
+model PageRevision {
+  id        Int      @id @default(autoincrement())
+  pageId    Int
+  userId    Int
+  content   String
+  createdAt DateTime @default(now())
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([pageId])
+  @@map("page_revisions")
+}
+
+model Product {
+  id                   Int                 @id @default(autoincrement())
+  tenantId             Int
+  categoryId           Int?
+  name                 String
+  description          String?
+  price                Float
+  cost                 Float               @default(0)
+  image                String?
+  isActive             Boolean             @default(true)
+  isFeatured           Boolean             @default(false)
+  sortOrder            Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @default(now())
+  slug                 String?
+  trackInventory       Boolean             @default(false)
+  currentStock         Float               @default(0)
+  lowStockThreshold    Float               @default(10)
+  orderItems           OrderItem[]
+  productIngredients   ProductIngredient[]
+  productVariants      ProductVariant[]
+  category             Category?           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductIngredient {
+  id           Int        @id @default(autoincrement())
+  productId    Int
+  ingredientId Int
+  quantity     Float
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, ingredientId])
+  @@map("product_ingredients")
+}
+
+model ProductVariant {
+  id         Int         @id @default(autoincrement())
+  productId  Int
+  name       String
+  price      Float
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now())
+  orderItems OrderItem[]
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model Project {
+  id        Int      @id @default(autoincrement())
+  name      String
+  userId    Int
+  tenantId  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  canvases  Canvas[]
+  user      User     @relation("ProjectUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("projects")
+}
+
+model Canvas {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("canvases")
+}
+
+model PageDesign {
+  id               Int                  @id @default(autoincrement())
+  tenantId         Int
+  slug             String
+  title            String
+  description      String?
+  content          Json
+  publishedContent Json?
+  template         String
+  isPublished      Boolean              @default(false)
+  isDraft          Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @default(now())
+  publishedAt      DateTime?
+  components       PageComponent[]
+  revisions        PageDesignRevision[]
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  seoSettings      SeoSettings?
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([isPublished])
+  @@map("page_designs")
+}
+
+model PageDesignRevision {
+  id                Int        @id @default(autoincrement())
+  pageDesignId      Int
+  content           Json
+  revisionNumber    Int
+  changeDescription String?
+  createdAt         DateTime   @default(now())
+  createdBy         Int?
+  user              User?      @relation("PageDesignRevisionUser", fields: [createdBy], references: [id])
+  pageDesign        PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+
+  @@index([pageDesignId])
+  @@map("page_design_revisions")
+}
+
+model SeoSettings {
+  id              Int        @id @default(autoincrement())
+  pageDesignId    Int        @unique
+  metaTitle       String
+  metaDescription String
+  metaKeywords    String?
+  ogImage         String?
+  twitterCard     String?
+  canonicalUrl    String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now())
+  pageDesign      PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+
+  @@map("seo_settings")
+}
+
+model PageComponent {
+  id            Int        @id @default(autoincrement())
+  pageDesignId  Int
+  componentType String
+  props         Json
+  position      Int
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @default(now())
+  pageDesign    PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+
+  @@index([pageDesignId])
+  @@map("page_components")
+}
+
+model StorefrontSettings {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int      @unique
+  colorScheme      Json
+  typography       Json
+  brandAssets      Json
+  seoDefaults      Json
+  socialLinks      Json
+  paymentMethods   Json
+  shippingSettings Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("storefront_settings")
+}
+
+model Employee {
+  id          Int          @id @default(autoincrement())
+  tenantId    Int
+  firstName   String
+  lastName    String
+  email       String
+  password    String
+  pin         String?
+  role        EmployeeRole @default(cashier)
+  isActive    Boolean      @default(true)
+  permissions Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now())
+  lastLogin   DateTime?
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders      Order[]      @relation("OrderEmployee")
+  posSessions POSSession[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("employees")
+}
+
+model POSSession {
+  id             Int       @id @default(autoincrement())
+  employeeId     Int
+  tenantId       Int
+  startTime      DateTime  @default(now())
+  endTime        DateTime?
+  openingCash    Float     @default(0)
+  closingCash    Float?
+  expectedCash   Float?
+  cashDifference Float?
+  totalSales     Float     @default(0)
+  totalOrders    Int       @default(0)
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([tenantId])
+  @@index([isActive])
+  @@map("pos_sessions")
+}
+
+model TenantRegistration {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  email             String
+  businessName      String
+  industry          String?
+  description       String?
+  verificationToken String   @unique
+  isVerified        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([verificationToken])
+  @@map("tenant_registrations")
+}
+
+model AdminNotification {
+  id          Int      @id @default(autoincrement())
+  type        String   @default("new_registration")
+  tenantId    Int?
+  title       String
+  message     String
+  actionUrl   String?
+  isRead      Boolean  @default(false)
+  isDismissed Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([isRead])
+  @@index([isDismissed])
+  @@map("admin_notifications")
+}
+
+model Plan {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  description   String
+  price         Int            @default(0)
+  billingCycle  String         @default("monthly")
+  features      String[]       @default([])
+  isActive      Boolean        @default(true)
+  displayOrder  Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now())
+  subscriptions Subscription[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+  @@map("plans")
+}
+
+model Subscription {
+  id                   Int                @id @default(autoincrement())
+  tenantId             Int                @unique
+  planId               String
+  status               SubscriptionStatus @default(trial)
+  billingCycle         BillingCycle       @default(trial)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  renewalDate          DateTime?
+  nextPaymentAmount    Int?
+  nextPaymentDate      DateTime?
+  autoRenew            Boolean            @default(true)
+  previousPlanId       String?
+  planChangedAt        DateTime?
+  unusedBalance        Int                @default(0)
+  pendingUpgradePlanId String?
+  upgradePendingAt     DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @default(now())
+  invoices             Invoice[]
+  payments             Payment[]
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  usageRecords         UsageRecord[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([renewalDate])
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id             Int           @id @default(autoincrement())
+  subscriptionId Int
+  invoiceNumber  String        @unique
+  status         InvoiceStatus @default(issued)
+  subtotal       Int
+  tax            Int           @default(0)
+  discount       Int           @default(0)
+  total          Int
+  issuedAt       DateTime      @default(now())
+  dueDate        DateTime
+  paidAt         DateTime?
+  lineItems      Json
+  notes          String?
+  paymentId      Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now())
+  payment        Payment?      @relation(fields: [paymentId], references: [id])
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([issuedAt])
+  @@map("invoices")
+}
+
+model Payment {
+  id                   Int           @id @default(autoincrement())
+  subscriptionId       Int
+  status               PaymentStatus @default(unpaid)
+  amount               Int
+  currency             String        @default("PHP")
+  paymentMethod        String?
+  cardBrand            String?
+  cardLastFour         String?
+  cardExpiry           String?
+  gatewayId            String?
+  gatewayTransactionId String?
+  errorMessage         String?
+  failureReason        String?
+  retryCount           Int           @default(0)
+  nextRetryAt          DateTime?
+  idempotencyKey       String?       @unique
+  verifiedAt           DateTime?
+  expiresAt            DateTime?
+  metadata             Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @default(now())
+  invoices             Invoice[]
+  subscription         Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model UsageRecord {
+  id             Int          @id @default(autoincrement())
+  subscriptionId Int
+  metric         String
+  value          Int
+  limit          Int?
+  percentage     Int
+  recordedAt     DateTime     @default(now())
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, metric])
+  @@index([subscriptionId])
+  @@map("usage_records")
+}
+
+model BillingPreference {
+  id                       Int      @id @default(autoincrement())
+  tenantId                 Int      @unique
+  notifyBeforeRenewal      Boolean  @default(true)
+  notificationDaysBefore   Int      @default(7)
+  billingEmail             String?
+  billingName              String?
+  billingAddress           Json?
+  taxId                    String?
+  autoRenew                Boolean  @default(true)
+  autoUpgradeIfOverage     Boolean  @default(false)
+  preferredPaymentMethodId Int?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @default(now())
+  gcashAccountName         String?
+  gcashEnabled             Boolean  @default(true)
+  gcashPhoneNumber         String?
+  gcashQrCodeUrl           String?
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("billing_preferences")
 }
 
 enum UserRole {
@@ -22,6 +737,39 @@ enum SubscriptionPlan {
   enterprise
 }
 
+enum PaymentStatus {
+  unpaid
+  partial
+  paid
+  refunded
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  paused
+  overdue
+  cancelled
+  expired
+  suspended
+}
+
+enum BillingCycle {
+  monthly
+  annual
+  lifetime
+  trial
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  paid
+  partial
+  failed
+  refunded
+}
+
 enum TenantUserRole {
   owner
   admin
@@ -29,479 +777,35 @@ enum TenantUserRole {
   viewer
 }
 
-model User {
-  id                     Int      @id @default(autoincrement())
-  firstName              String
-  lastName               String
-  email                  String   @unique
-  password               String
-  role                   UserRole @default(user)
-  isActive               Boolean  @default(true)
-  emailVerified          Boolean  @default(false)
-  emailVerificationToken String?
-  passwordResetToken     String?
-  passwordResetExpires   DateTime?
-  lastLogin              DateTime?
-  loginAttempts          Int      @default(0)
-  lockUntil              DateTime?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @default(now())
-
-  // Relations
-  ownedTenants           Tenant[]         @relation("TenantOwner")
-  tenantUsers            TenantUser[]
-  activityLogs           ActivityLog[]
-  orders                 Order[]          @relation("OrderCustomer")
-  orderStatusHistories   OrderStatusHistory[]
-  pages                  Page[]
-  pageRevisions          PageRevision[]
-  projects               Project[]        @relation("ProjectUser")
-  pageDesignRevisions    PageDesignRevision[] @relation("PageDesignRevisionUser")
-
-  @@map("users")
+enum EmployeeRole {
+  cashier
+  manager
+  admin
 }
 
-model Tenant {
-  id                   Int               @id @default(autoincrement())
-  name                 String
-  subdomain            String            @unique
-  domain               String?
-  description          String?
-  ownerId              Int
-  owner                User              @relation("TenantOwner", fields: [ownerId], references: [id])
-  logo                 String?
-  favicon              String?
-  settings             Json?
-  isActive             Boolean           @default(true)
-  isPremium            Boolean           @default(false)
-  subscriptionPlan     SubscriptionPlan  @default(free)
-  subscriptionExpires  DateTime?
-  customCSS            String?
-  googleAnalytics      String?
-  facebookPixel        String?
-  
-  // Customization fields
-  industry             String?
-  primaryColor         String?           @default("#1e40af")
-  secondaryColor       String?           @default("#059669")
-  
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @default(now())
+model AdminSettings {
+  id                      Int       @id @default(autoincrement())
+  adminGcashPhoneNumber   String?
+  adminGcashAccountName   String?
+  adminGcashQrCodeUrl     String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now())
 
-  // Relations
-  tenantUsers          TenantUser[]
-  categories           Category[]
-  customers            Customer[]
-  ingredients          Ingredient[]
-  inventoryTransactions InventoryTransaction[]
-  media                Media[]
-  orders               Order[]
-  pages                Page[]
-  products             Product[]
-  activityLogs         ActivityLog[]
-  pageDesigns          PageDesign[]
-  storefrontSettings   StorefrontSettings?
-
-  @@map("tenants")
+  @@map("admin_settings")
 }
 
-model TenantUser {
-  id          Int             @id @default(autoincrement())
-  tenantId    Int
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
-  userId      Int
-  user        User            @relation(fields: [userId], references: [id])
-  role        TenantUserRole  @default(viewer)
-  permissions Json?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @default(now())
+model OTP {
+  id        Int       @id @default(autoincrement())
+  email     String
+  otp       String
+  userType  String    @default("tenant") // tenant or customer
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
 
-  @@unique([tenantId, userId])
-  @@map("tenant_users")
-}
-
-model ActivityLog {
-  id        Int      @id @default(autoincrement())
-  userId    Int?
-  user      User?    @relation(fields: [userId], references: [id])
-  tenantId  Int?
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
-  action    String
-  details   Json?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([tenantId])
-  @@index([action])
-  @@index([createdAt])
-  @@map("activity_log")
-}
-
-model Category {
-  id          Int      @id @default(autoincrement())
-  tenantId    Int
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  name        String
-  description String?
-  image       String?
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now())
-
-  // Relations
-  products    Product[]
-
-  @@index([tenantId])
-  @@map("categories")
-}
-
-model Customer {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
-  address   Json?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  // Relations
-  orders    Order[]
-
-  @@index([tenantId])
   @@index([email])
-  @@map("customers")
+  @@index([userType])
+  @@map("otps")
 }
 
-model Ingredient {
-  id             Int      @id @default(autoincrement())
-  tenantId       Int
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  name           String
-  description    String?
-  unit           String   @default("pieces")
-  currentStock   Float    @default(0)
-  minStock       Float    @default(0)
-  costPerUnit    Float    @default(0)
-  supplier       String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now())
-
-  // Relations
-  productIngredients ProductIngredient[]
-  inventoryTransactions InventoryTransaction[]
-
-  @@index([tenantId])
-  @@map("ingredients")
-}
-
-model InventoryTransaction {
-  id            Int           @id @default(autoincrement())
-  tenantId      Int
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
-  ingredientId  Int
-  ingredient    Ingredient    @relation(fields: [ingredientId], references: [id])
-  type          String        // 'in', 'out', 'adjustment'
-  quantity      Float
-  reason        String?
-  cost          Float?
-  performedBy   Int?
-  createdAt     DateTime      @default(now())
-
-  @@index([tenantId])
-  @@index([ingredientId])
-  @@map("inventory_transactions")
-}
-
-model Media {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  filename  String
-  path      String
-  url       String
-  type      String   // 'image', 'video', 'document'
-  size      Int
-  alt       String?
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@map("media")
-}
-
-model Order {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  customerId Int?
-  customer  Customer? @relation(fields: [customerId], references: [id])
-  userId    Int?
-  user      User?    @relation("OrderCustomer", fields: [userId], references: [id])
-  orderNumber String @unique
-  status    String   @default("pending")
-  orderType String   @default("dine-in") // 'dine-in', 'takeout', 'delivery'
-  total     Float    @default(0)
-  tax       Float    @default(0)
-  discount  Float    @default(0)
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  // Relations
-  orderItems OrderItem[]
-  orderStatusHistories OrderStatusHistory[]
-
-  @@index([tenantId])
-  @@index([customerId])
-  @@index([status])
-  @@map("orders")
-}
-
-model OrderItem {
-  id          Int     @id @default(autoincrement())
-  orderId     Int
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId   Int
-  product     Product @relation(fields: [productId], references: [id])
-  variantId   Int?
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
-  quantity    Int
-  price       Float
-  notes       String?
-  createdAt   DateTime @default(now())
-
-  @@index([orderId])
-  @@index([productId])
-  @@map("order_items")
-}
-
-model OrderStatusHistory {
-  id        Int      @id @default(autoincrement())
-  orderId   Int
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  status    String
-  notes     String?
-  createdAt DateTime @default(now())
-
-  @@index([orderId])
-  @@map("order_status_history")
-}
-
-model Page {
-  id          Int      @id @default(autoincrement())
-  tenantId    Int
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
-  title       String
-  slug        String
-  content     String?
-  isPublished Boolean  @default(false)
-  publishedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now())
-
-  // Relations
-  pageRevisions PageRevision[]
-
-  @@unique([tenantId, slug])
-  @@index([tenantId])
-  @@index([userId])
-  @@map("pages")
-}
-
-model PageRevision {
-  id        Int      @id @default(autoincrement())
-  pageId    Int
-  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  createdAt DateTime @default(now())
-
-  @@index([pageId])
-  @@map("page_revisions")
-}
-
-model Product {
-  id             Int      @id @default(autoincrement())
-  tenantId       Int
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  categoryId     Int?
-  category       Category? @relation(fields: [categoryId], references: [id])
-  name           String
-  description    String?
-  price          Float
-  cost           Float    @default(0)
-  image          String?
-  isActive       Boolean  @default(true)
-  isFeatured     Boolean  @default(false)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now())
-
-  // Relations
-  productIngredients ProductIngredient[]
-  productVariants    ProductVariant[]
-  orderItems         OrderItem[]
-
-  @@index([tenantId])
-  @@index([categoryId])
-  @@map("products")
-}
-
-model ProductIngredient {
-  id           Int        @id @default(autoincrement())
-  productId    Int
-  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  ingredientId Int
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  quantity     Float
-
-  @@unique([productId, ingredientId])
-  @@map("product_ingredients")
-}
-
-model ProductVariant {
-  id          Int         @id @default(autoincrement())
-  productId   Int
-  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  name        String
-  price       Float
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @default(now())
-
-  // Relations
-  orderItems  OrderItem[]
-
-  @@index([productId])
-  @@map("product_variants")
-}
-
-// Original BrandStudio models (adapted)
-model Project {
-  id        Int      @id @default(autoincrement())
-  name      String
-  userId    Int
-  user      User     @relation("ProjectUser", fields: [userId], references: [id])
-  canvases  Canvas[]
-  tenantId  Int? // Link to tenant for multi-tenancy
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@map("projects")
-}
-
-model Canvas {
-  id        Int      @id @default(autoincrement())
-  projectId Int
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  data      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([projectId])
-  @@map("canvases")
-}
-
-// BrandStudio eCommerce Builder Models
-model PageDesign {
-  id                Int            @id @default(autoincrement())
-  tenantId          Int
-  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  slug              String
-  title             String
-  description       String?
-  content           Json           // Serialized page layout
-  publishedContent  Json?          // Currently published version
-  template          String         // "homepage", "product", "category", "collection"
-  isPublished       Boolean        @default(false)
-  isDraft           Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @default(now())
-  publishedAt       DateTime?
-  
-  // Relations
-  revisions         PageDesignRevision[]
-  seoSettings       SeoSettings?
-  components        PageComponent[]
-
-  @@unique([tenantId, slug])
-  @@index([tenantId])
-  @@index([isPublished])
-  @@map("page_designs")
-}
-
-model PageDesignRevision {
-  id                Int        @id @default(autoincrement())
-  pageDesignId      Int
-  pageDesign        PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
-  content           Json
-  revisionNumber    Int
-  changeDescription String?
-  createdAt         DateTime   @default(now())
-  createdBy         Int?
-  user              User?      @relation("PageDesignRevisionUser", fields: [createdBy], references: [id])
-
-  @@index([pageDesignId])
-  @@map("page_design_revisions")
-}
-
-model SeoSettings {
-  id                Int        @id @default(autoincrement())
-  pageDesignId      Int        @unique
-  pageDesign        PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
-  metaTitle         String
-  metaDescription   String
-  metaKeywords      String?
-  ogImage           String?
-  twitterCard       String?
-  canonicalUrl      String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @default(now())
-
-  @@map("seo_settings")
-}
-
-model PageComponent {
-  id                Int        @id @default(autoincrement())
-  pageDesignId      Int
-  pageDesign        PageDesign @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
-  componentType     String     // "hero", "product-grid", "cta", "testimonials", etc.
-  props             Json       // Component-specific properties
-  position          Int        // Z-order
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @default(now())
-
-  @@index([pageDesignId])
-  @@map("page_components")
-}
-
-model StorefrontSettings {
-  id                Int      @id @default(autoincrement())
-  tenantId          Int      @unique
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  colorScheme       Json     // Primary, secondary, accent colors
-  typography        Json     // Font families, sizes
-  brandAssets       Json     // Logo, favicon, banner URLs
-  seoDefaults       Json     // Default meta tags
-  socialLinks       Json     // Social media URLs
-  paymentMethods    Json     // Stripe, PayPal configs
-  shippingSettings  Json     // Zones, rates
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @default(now())
-
-  @@index([tenantId])
-  @@map("storefront_settings")
-}

@@ -18,7 +18,11 @@ const fadeUp = {
   show: { opacity: 1, y: 0 },
 };
 
-export default function CTASection() {
+interface CTASectionProps {
+  storefront?: unknown
+}
+
+export default function CTASection({ storefront }: CTASectionProps) {
   const benefits = [
     "Free 14-day trial",
     "No credit card required",

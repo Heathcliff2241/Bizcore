@@ -2,18 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolveTenant } from '@/lib/tenant'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // For now, assume tenantId from user, but since multi-tenant, need to get from session or something
-    // For simplicity, get all ingredients for now
+    const { searchParams } = new URL(request.url)
+    const subdomain = searchParams.get('subdomain')
+
+    const tenant = await resolveTenant(session, subdomain)
+
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
     const ingredients = await prisma.ingredient.findMany({
-      where: { isActive: true },
+      where: { tenantId: tenant.id, isActive: true },
       orderBy: { createdAt: 'desc' }
     })
 
@@ -37,7 +45,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, unit_of_measure, current_stock, low_stock_threshold, unit_cost, supplier, description } = await request.json()
+    const { searchParams } = new URL(request.url)
+    const subdomain = searchParams.get('subdomain')
+
+    const tenant = await resolveTenant(session, subdomain)
+
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+    const {
+      name,
+      unit_of_measure,
+      current_stock,
+      low_stock_threshold,
+      unit_cost,
+      supplier,
+      description
+    } = await request.json()
 
     if (!name || !unit_of_measure || current_stock === undefined || low_stock_threshold === undefined) {
       return NextResponse.json(
@@ -46,17 +71,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For now, hardcode tenantId, but should get from user
-    const tenantId = 1
+    const currentStockValue = Number(current_stock)
+    const lowStockValue = Number(low_stock_threshold)
+    const unitCostValue = unit_cost !== undefined && unit_cost !== null && unit_cost !== '' ? Number(unit_cost) : 0
+
+    if (!Number.isFinite(currentStockValue) || !Number.isFinite(lowStockValue)) {
+      return NextResponse.json(
+        { error: 'current_stock and low_stock_threshold must be valid numbers' },
+        { status: 400 }
+      )
+    }
+
+    if (!Number.isFinite(unitCostValue)) {
+      return NextResponse.json(
+        { error: 'unit_cost must be a valid number' },
+        { status: 400 }
+      )
+    }
 
     const ingredient = await prisma.ingredient.create({
       data: {
-        tenantId,
+        tenantId: tenant.id,
         name,
         unit: unit_of_measure,
-        currentStock: parseFloat(current_stock),
-        minStock: parseFloat(low_stock_threshold),
-        costPerUnit: unit_cost ? parseFloat(unit_cost) : 0,
+        currentStock: currentStockValue,
+        minStock: lowStockValue,
+        costPerUnit: unitCostValue,
         supplier,
         description
       }

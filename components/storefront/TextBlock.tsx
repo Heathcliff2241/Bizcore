@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify'
+
 interface TextBlockProps {
   text?: string
   fontSize?: number
@@ -6,6 +8,7 @@ interface TextBlockProps {
   backgroundColor?: string
   padding?: number
   textAlign?: 'left' | 'center' | 'right'
+  fullWidth?: boolean
 }
 
 export function TextBlock({
@@ -16,16 +19,19 @@ export function TextBlock({
   backgroundColor = 'transparent',
   padding = 40,
   textAlign = 'left'
+  , fullWidth = true
 }: TextBlockProps) {
+  const sanitized = (typeof window !== 'undefined' && DOMPurify) ? DOMPurify.sanitize(text) : text.replace(/<[^>]+>/g, '')
+
   return (
     <section 
       className="w-full"
       style={{ 
         backgroundColor,
-        padding: `${padding}px 0`
+        padding: `${padding}px ${fullWidth ? '0' : '8px'}`
       }}
     >
-      <div className="w-full max-w-7xl mx-auto px-8 md:px-16 lg:px-24">
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} px-8 md:px-16 lg:px-24`}>
         <div 
           className="prose prose-lg max-w-none"
           style={{
@@ -34,7 +40,7 @@ export function TextBlock({
             color,
             textAlign
           }}
-          dangerouslySetInnerHTML={{ __html: text }}
+          dangerouslySetInnerHTML={{ __html: sanitized }}
         />
       </div>
     </section>

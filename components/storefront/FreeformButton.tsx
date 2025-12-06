@@ -69,7 +69,7 @@ export function FreeformButton({
   text = 'Button',
   link,
   url,
-  backgroundColor = '#1f2937',
+  backgroundColor,
   textColor = '#ffffff',
   borderColor,
   borderWidth,
@@ -93,13 +93,16 @@ export function FreeformButton({
   const resolvedPadding = resolvePadding(padding)
   const resolvedTextTransform = resolveTextTransform(textTransform, uppercase)
 
+  // Use theme primary color or fallback to dark gray
+  const resolvedBackgroundColor = backgroundColor || 'var(--color-primary, #1f2937)'
+
   const style: CSSProperties = {
     display: 'inline-flex',
     alignItems,
     justifyContent,
     width: '100%',
     height: '100%',
-    backgroundColor,
+    backgroundColor: resolvedBackgroundColor,
     color: textColor,
     fontSize: fontSize ? `${fontSize}px` : undefined,
     fontFamily,

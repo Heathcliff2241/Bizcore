@@ -4,6 +4,7 @@ interface DividerBlockProps {
   style?: 'solid' | 'dashed' | 'dotted'
   width?: string
   margin?: number
+  fullWidth?: boolean
 }
 
 export function DividerBlock({
@@ -12,6 +13,7 @@ export function DividerBlock({
   style = 'solid',
   width = '100%',
   margin = 20
+  , fullWidth = false
 }: DividerBlockProps) {
   return (
     <section 
@@ -21,7 +23,7 @@ export function DividerBlock({
         paddingBottom: `${margin}px`
       }}
     >
-      <div className="w-full max-w-7xl mx-auto">
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''}`}>
         <hr 
           style={{
             height: `${thickness}px`,

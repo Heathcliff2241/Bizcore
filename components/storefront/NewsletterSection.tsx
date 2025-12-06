@@ -15,6 +15,7 @@ interface NewsletterSectionProps {
     width?: number
     height?: number
   }
+  fullWidth?: boolean
 }
 
 export function NewsletterSection({
@@ -26,6 +27,7 @@ export function NewsletterSection({
   textColor = '#ffffff',
   height,
   size
+  , fullWidth = true
 }: NewsletterSectionProps) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -58,10 +60,10 @@ export function NewsletterSection({
 
   return (
     <section 
-      className="px-8 md:px-16 lg:px-24 w-full"
+      className={`w-full ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}
       style={sectionStyle}
     >
-      <div className="w-full max-w-3xl mx-auto text-center">
+      <div className={`w-full ${!fullWidth ? 'max-w-3xl mx-auto' : ''} text-center`}>
         <h2 
           className="text-3xl md:text-4xl font-bold mb-4"
           style={{ color: textColor }}

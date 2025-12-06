@@ -1,0 +1,162 @@
+# =============================================
+# BizCore Security-Hardened Docker Compose Stack
+# Production-Ready Configuration
+# =============================================
+
+x-common-healthcheck: &default-health
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+x-common-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  # ==========================
+  # Nginx Reverse Proxy
+  # ==========================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: bizcore_nginx
+    restart: unless-stopped
+    user: root
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./brandstudio-vite/dist:/usr/share/nginx/html/brandstudio:ro
+      - nginx_logs:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+    environment:
+      TZ: UTC
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - postgres
+    networks:
+      - bizcore_network
+    <<: *default-security
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================
+  # PostgreSQL Database
+  # ==========================
+  postgres:
+    image: postgres:15-alpine
+    container_name: bizcore_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bizcore_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      <<: *default-health
+    networks:
+      - bizcore_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================
+  # PgBouncer Connection Pooler
+  # ==========================
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: bizcore_pgbouncer
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD:-postgres123}@postgres:5432/bizcore_dev
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      MIN_POOL_SIZE: 5
+      RESERVE_POOL_SIZE: 5
+      LISTEN_PORT: 6432
+      # Security options
+      SERVER_LIFETIME: 3600
+      IDLE_IN_TRANSACTION_SESSION_TIMEOUT: 600
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bizcore_network
+    <<: *default-security
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================
+  # pgAdmin (Database GUI)
+  # ==========================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bizcore_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bizcore.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'True'
+      PGADMIN_CONFIG_COOKIE_DEFAULT_SECURE: 'True'
+      PGADMIN_CONFIG_COOKIE_DEFAULT_SAMESITE: 'Lax'
+      TZ: UTC
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bizcore_network
+    <<: *default-security
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ==========================
+# VOLUMES
+# ==========================
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  nginx_cache:
+    driver: local
+
+# ==========================
+# NETWORK
+# ==========================
+networks:
+  bizcore_network:
+    driver: bridge

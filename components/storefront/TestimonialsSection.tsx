@@ -15,6 +15,7 @@ interface TestimonialsSectionProps {
   columns?: number
   backgroundColor?: string
   textColor?: string
+  fullWidth?: boolean
 }
 
 export function TestimonialsSection({
@@ -45,13 +46,14 @@ export function TestimonialsSection({
   columns = 3,
   backgroundColor = '#f9fafb',
   textColor = '#000000'
+  , fullWidth = true
 }: TestimonialsSectionProps) {
   return (
     <section 
-      className="py-16 px-8 md:px-16 lg:px-24 w-full"
+      className={`py-16 w-full ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}
       style={{ backgroundColor }}
     >
-      <div className="w-full max-w-7xl mx-auto">
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''}`}>
         {title && (
           <h2 
             className="text-3xl md:text-4xl font-bold text-center mb-12"

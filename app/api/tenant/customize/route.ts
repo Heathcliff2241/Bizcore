@@ -48,18 +48,25 @@ function isComponentArray(value: unknown): value is ComponentNode[] {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
+    const payload = await request.json() as CustomizeTenantPayload & { subdomain?: string }
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    let tenantId: number | null = null
+
+    // If subdomain is provided (from onboarding), use that
+    if (payload.subdomain) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { subdomain: payload.subdomain }
+      })
+      tenantId = tenant?.id ?? null
+    } else if (session?.user?.id) {
+      // Otherwise use session-based auth
+      tenantId = await getTenantId(session.user.id)
     }
-
-    const tenantId = await getTenantId(session.user.id)
 
     if (!tenantId) {
-      return NextResponse.json({ error: 'User is not associated with a tenant' }, { status: 403 })
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 403 })
     }
 
-    const payload = await request.json() as CustomizeTenantPayload
     const {
       industry,
       primaryColor,

@@ -1,0 +1,106 @@
+# ===========================================================
+# BizCore Development Nginx Configuration
+# For local development with Next.js running on host machine
+# Supports both bizcore.test and localhost domains
+# ===========================================================
+
+server {
+    listen 80;
+    server_name bizcore.test localhost 127.0.0.1;
+
+    # Logs
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    # ====== STATIC FILES & NEXT.JS ASSETS ======
+    # Proxy Next.js static files to backend
+    location ~ ^/(_next|public|static)/ {
+        proxy_pass http://host.docker.internal:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Cache static assets for 30 days
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # ====== API ENDPOINTS (Rate Limited) ======
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        
+        proxy_pass http://host.docker.internal:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # ====== AUTH ENDPOINTS (Strict Rate Limiting) ======
+    location ~ ^/(auth|signin|signup)/ {
+        limit_req zone=login burst=5 nodelay;
+        
+        proxy_pass http://host.docker.internal:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ====== ALL OTHER REQUESTS ======
+    location / {
+        limit_req zone=general burst=50 nodelay;
+        
+        proxy_pass http://host.docker.internal:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # ====== DENY DANGEROUS PATHS ======
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ ~$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ /(config\.php|xmlrpc\.php|wp-admin|wp-login) {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # ====== HEALTH CHECK ENDPOINT ======
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}

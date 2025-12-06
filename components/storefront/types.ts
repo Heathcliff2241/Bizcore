@@ -3,4 +3,6 @@ export interface StorefrontContext {
   subdomain: string
   name: string
   settings?: Record<string, unknown>
+  primaryColor?: string
+  secondaryColor?: string
 }

@@ -458,41 +458,41 @@ function createLoginPage(businessName: string): DefaultPageTemplate {
           padding: 40,
           shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
         },
-        children: []
+        children: [
+          {
+            id: 'login-title',
+            type: 'text',
+            position: { x: 20, y: 20 },
+            size: { width: 280, height: 40 },
+            rotation: 0,
+            locked: false,
+            props: {
+              text: 'Welcome Back',
+              fontSize: 24,
+              fontWeight: 'bold',
+              textAlign: 'center',
+              color: '#2d3748'
+            },
+            children: []
+          },
+          {
+            id: 'login-form',
+            type: 'login-form',
+            position: { x: 20, y: 80 },
+            size: { width: 280, height: 300 },
+            rotation: 0,
+            locked: false,
+            props: {
+              fields: ['email', 'password'],
+              submitText: 'Sign In',
+              showForgotPassword: true,
+              showSignUpLink: true
+            },
+            children: []
+          }
+        ]
       },
-      // Login Title
-      {
-        id: 'login-title',
-        type: 'text',
-        position: { x: 560, y: 200 },
-        size: { width: 320, height: 40 },
-        rotation: 0,
-        locked: false,
-        props: {
-          text: 'Welcome Back',
-          fontSize: 24,
-          fontWeight: 'bold',
-          textAlign: 'center',
-          color: '#2d3748'
-        },
-        children: []
-      },
-      // Login Form
-      {
-        id: 'login-form',
-        type: 'login-form',
-        position: { x: 560, y: 260 },
-        size: { width: 320, height: 300 },
-        rotation: 0,
-        locked: false,
-        props: {
-          fields: ['email', 'password'],
-          submitText: 'Sign In',
-          showForgotPassword: true,
-          showSignUpLink: true
-        },
-        children: []
-      }
+      // (title & form are children of login-container)
     ]
   }
 }
@@ -539,41 +539,41 @@ function createSignUpPage(businessName: string): DefaultPageTemplate {
           padding: 40,
           shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
         },
-        children: []
+        children: [
+          {
+            id: 'signup-title',
+            type: 'text',
+            position: { x: 20, y: 20 },
+            size: { width: 280, height: 40 },
+            rotation: 0,
+            locked: false,
+            props: {
+              text: 'Create Account',
+              fontSize: 24,
+              fontWeight: 'bold',
+              textAlign: 'center',
+              color: '#2d3748'
+            },
+            children: []
+          },
+          {
+            id: 'signup-form',
+            type: 'signup-form',
+            position: { x: 20, y: 80 },
+            size: { width: 280, height: 300 },
+            rotation: 0,
+            locked: false,
+            props: {
+              fields: ['firstName', 'lastName', 'email', 'password', 'confirmPassword'],
+              submitText: 'Create Account',
+              showLoginLink: true,
+              requireTerms: true
+            },
+            children: []
+          }
+        ]
       },
-      // Sign Up Title
-      {
-        id: 'signup-title',
-        type: 'text',
-        position: { x: 560, y: 180 },
-        size: { width: 320, height: 40 },
-        rotation: 0,
-        locked: false,
-        props: {
-          text: 'Create Account',
-          fontSize: 24,
-          fontWeight: 'bold',
-          textAlign: 'center',
-          color: '#2d3748'
-        },
-        children: []
-      },
-      // Sign Up Form
-      {
-        id: 'signup-form',
-        type: 'signup-form',
-        position: { x: 560, y: 240 },
-        size: { width: 320, height: 400 },
-        rotation: 0,
-        locked: false,
-        props: {
-          fields: ['firstName', 'lastName', 'email', 'password', 'confirmPassword'],
-          submitText: 'Create Account',
-          showLoginLink: true,
-          requireTerms: true
-        },
-        children: []
-      }
+      // (title & form are children of signup-container)
     ]
   }
 }
