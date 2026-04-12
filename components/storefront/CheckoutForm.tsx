@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from './hooks/useCart'
-import { useSession } from 'next-auth/react'
 import { useCustomerSession } from './hooks/useCustomerSession'
 import Link from 'next/link'
 import type { StorefrontContext } from './types'
@@ -41,6 +40,7 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'gcash' | 'maya'>('cash')
   const [paymentProof, setPaymentProof] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isProcessingFile, setIsProcessingFile] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [showCartModal, setShowCartModal] = useState(true)
@@ -48,7 +48,7 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
   useEffect(() => {
     setMounted(true)
     console.log('CheckoutForm mounted - Current cart:', cart)
-  }, [])
+  }, [cart])
 
   useEffect(() => {
     if (session?.user) {
@@ -107,6 +107,12 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
       }
     }
 
+    // Validate payment proof for GCash and Maya
+    if (['gcash', 'maya'].includes(paymentMethod) && !paymentProof) {
+      setError('Please upload your payment proof for this payment method')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -134,7 +140,10 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
         paymentProof: paymentProof || undefined
       }
 
-      console.log('Sending order data:', orderData)
+      console.log('Sending order data:', {
+        ...orderData,
+        paymentProof: paymentProof ? `base64(${paymentProof.length} bytes)` : undefined
+      })
 
       const response = await fetch(`/api/orders?subdomain=${storefront.subdomain}`, {
         method: 'POST',
@@ -150,11 +159,9 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
         throw new Error(errorData.message || 'Failed to create order')
       }
 
-      const result = await response.json()
-
-      // Clear cart and redirect to success
+      // Response received successfully, clear cart and redirect
       clearCart()
-      router.push(`/storefront/${storefront.subdomain}/orders`)
+      router.push(`/storefront/${storefront.subdomain}/account?tab=orders`)
     } catch (err) {
       console.error('Checkout error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -454,7 +461,7 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
                           name="payment"
                           value={method}
                           checked={paymentMethod === method}
-                          onChange={(e) => setPaymentMethod(e.target.value as any)}
+                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'gcash' | 'maya')}
                           className="w-4 h-4"
                         />
                         <span className="ml-3 font-medium text-gray-900 capitalize">{method}</span>
@@ -473,10 +480,63 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             if (file) {
+                              setIsProcessingFile(true)
+                              // Compress image to reduce base64 size
                               const reader = new FileReader()
                               reader.onload = (event) => {
-                                const base64 = event.target?.result as string
-                                setPaymentProof(base64)
+                                const img = new Image()
+                                img.onload = () => {
+                                  try {
+                                    // Create canvas and draw resized image
+                                    const canvas = document.createElement('canvas') as HTMLCanvasElement
+                                    const maxWidth = 600
+                                    const maxHeight = 600
+                                    let width = img.width
+                                    let height = img.height
+                                    
+                                    if (width > height) {
+                                      if (width > maxWidth) {
+                                        height *= maxWidth / width
+                                        width = maxWidth
+                                      }
+                                    } else {
+                                      if (height > maxHeight) {
+                                        width *= maxHeight / height
+                                        height = maxHeight
+                                      }
+                                    }
+                                    
+                                    canvas.width = width
+                                    canvas.height = height
+                                    const ctx = canvas.getContext('2d')
+                                    ctx?.drawImage(img, 0, 0, width, height)
+                                    
+                                    // Convert to base64 with quality reduction
+                                    const base64 = canvas.toDataURL('image/jpeg', 0.7)
+                                    console.log('Payment proof processed:', {
+                                      type: typeof base64,
+                                      length: base64.length,
+                                      preview: base64.substring(0, 50)
+                                    })
+                                    setPaymentProof(base64)
+                                  } catch (err) {
+                                    console.error('Error processing image:', err)
+                                    setError('Failed to process image')
+                                  } finally {
+                                    setIsProcessingFile(false)
+                                  }
+                                }
+                                img.onerror = () => {
+                                  console.error('Failed to load image')
+                                  setError('Failed to load image. Please try another file.')
+                                  setIsProcessingFile(false)
+                                }
+                                img.src = event.target?.result as string
+                              }
+                              reader.onerror = () => {
+                                console.error('Failed to read file')
+                                setError('Failed to read file. Please try again.')
+                                setIsProcessingFile(false)
                               }
                               reader.readAsDataURL(file)
                             }
@@ -488,7 +548,9 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
                       {paymentProof && (
                         <div className="mt-3">
                           <p className="text-xs font-medium text-green-700 mb-2">✓ Proof uploaded</p>
-                          <img src={paymentProof} alt="Payment proof preview" className="max-h-32 max-w-32 rounded border border-blue-300" />
+                          {/* Using img tag for data URLs - Next.js Image doesn't support data URLs */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={paymentProof} alt="Payment proof preview" className="max-h-32 max-w-32 rounded border border-blue-300" suppressHydrationWarning />
                         </div>
                       )}
                     </div>
@@ -498,10 +560,10 @@ export function CheckoutForm({ storefront }: CheckoutFormProps) {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={isSubmitting || cart.length === 0}
+                  disabled={isSubmitting || isProcessingFile || cart.length === 0}
                   className="w-full py-4 bg-black text-white font-semibold rounded-lg hover:bg-gray-900 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg"
                 >
-                  {isSubmitting ? 'Processing...' : `Place Order • ₱${total.toFixed(2)}`}
+                  {isProcessingFile ? 'Processing image...' : isSubmitting ? 'Processing...' : `Place Order • ₱${total.toFixed(2)}`}
                 </button>
 
                 <p className="text-center text-sm text-gray-500">

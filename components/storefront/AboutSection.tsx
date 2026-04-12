@@ -36,7 +36,9 @@ export function AboutSection({
       className="w-full overflow-hidden"
       style={{
         backgroundColor,
-        padding: `${padding}px`,
+        padding: `${Math.max(24, Math.min(padding, 96))}px`,
+        paddingLeft: `clamp(1rem, 5vw, ${padding}px)`,
+        paddingRight: `clamp(1rem, 5vw, ${padding}px)`,
       }}
     >
       <motion.div
@@ -46,7 +48,7 @@ export function AboutSection({
         transition={{ duration: 0.6 }}
         viewport={{ once: true }}
       >
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-12 items-center ${imagePosition === 'right' ? 'md:grid-cols-2' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 md:gap-12 items-center ${imagePosition === 'right' ? 'md:grid-cols-2' : ''}`}>
           {/* Image - Left */}
           {image && imagePosition === 'left' && (
             <motion.div
@@ -75,7 +77,7 @@ export function AboutSection({
           >
             {subheading && (
               <motion.p
-                className="text-sm font-semibold uppercase tracking-wide mb-2"
+                className="text-xs sm:text-sm font-semibold uppercase tracking-wide mb-2 sm:mb-3"
                 style={{ color: accentColor }}
                 initial={{ opacity: 0 }}
                 whileInView={{ opacity: 1 }}
@@ -87,7 +89,7 @@ export function AboutSection({
             )}
 
             <motion.h2
-              className="text-4xl font-bold mb-6 leading-tight"
+              className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 leading-tight"
               style={{ color: textColor }}
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -98,7 +100,7 @@ export function AboutSection({
             </motion.h2>
 
             <motion.p
-              className="text-lg leading-relaxed mb-8 opacity-90"
+              className="text-base sm:text-lg leading-relaxed mb-6 sm:mb-8 opacity-90"
               style={{ color: textColor }}
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -113,12 +115,12 @@ export function AboutSection({
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               viewport={{ once: true }}
-              className="flex gap-4"
+              className="flex gap-3 sm:gap-4"
             >
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.97 }}
-                className="px-6 py-3 rounded-lg font-semibold text-white transition-all"
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold text-white transition-all text-sm sm:text-base"
                 style={{ backgroundColor: accentColor }}
               >
                 Learn More

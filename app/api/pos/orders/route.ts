@@ -1,36 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logActivity } from '@/lib/activityLogger'
-import jwt from 'jsonwebtoken'
 import { createPOSOrderSchema } from '@/lib/validation'
 import { z } from 'zod'
-
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'your-secret-key'
-
-function verifyToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null
-  }
-
-  const token = authHeader.substring(7)
-  try {
-    return jwt.verify(token, JWT_SECRET) as {
-      employeeId: number
-      tenantId: number
-      role: string
-    }
-  } catch {
-    return null
-  }
-}
 
 // POST /api/pos/orders - Create a new POS order
 export async function POST(request: NextRequest) {
   try {
-    const decoded = verifyToken(request)
-    if (!decoded) {
+    const session = await getServerSession(authOptions)
+    
+    // Verify session and POS employee status
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { id?: string; tenantId?: string; userType?: string }
+    if (sessionUser.userType !== 'pos_employee') {
+      return NextResponse.json({ error: 'Only POS employees can create orders' }, { status: 403 })
+    }
+
+    const employeeId = sessionUser.id ? parseInt(sessionUser.id) : null
+    const tenantId = sessionUser.tenantId ? parseInt(sessionUser.tenantId) : null
+
+    if (!employeeId || !tenantId) {
+      return NextResponse.json({ error: 'Invalid employee or tenant' }, { status: 400 })
     }
 
     const body = await request.json()
@@ -63,7 +58,10 @@ export async function POST(request: NextRequest) {
 
     for (const item of items) {
       const product = await prisma.product.findUnique({
-        where: { id: item.productId }
+        where: { id: item.productId },
+        include: {
+          productVariants: true
+        }
       })
 
       if (!product) {
@@ -73,24 +71,43 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const itemPrice = product.price * item.quantity
+      // Determine the price: use variant price if variantId is provided, otherwise use base price
+      let itemUnitPrice = product.price
+      let selectedVariantId = null
+
+      if (item.variantId) {
+        const variant = product.productVariants?.find(v => v.id === item.variantId)
+        if (variant) {
+          itemUnitPrice = variant.price
+          selectedVariantId = variant.id
+        } else {
+          // Variant not found, return error
+          return NextResponse.json(
+            { error: `Variant ${item.variantId} not found for product ${item.productId}` },
+            { status: 404 }
+          )
+        }
+      }
+
+      const itemPrice = itemUnitPrice * item.quantity
       subtotal += itemPrice
 
       orderItems.push({
         productId: item.productId,
-        // variantId: item.variantId || null,
+        variantId: selectedVariantId,
         quantity: item.quantity,
-        price: product.price,
+        price: itemUnitPrice,
         notes: item.notes || null
       })
     }
 
-    // Get tenant settings for tax rate (default to 1% if not set)
+    // Get tenant settings for tax rate (default to 0% if not set)
     const tenantSettings = await prisma.tenant.findUnique({
-      where: { id: decoded.tenantId },
+      where: { id: tenantId },
       select: { settings: true }
     })
-    const taxRate = (tenantSettings?.settings as any)?.tax?.defaultTaxPercent || 0.01
+    const taxPercentage = (tenantSettings?.settings as any)?.tax?.defaultTaxPercent || 0
+    const taxRate = taxPercentage / 100
     
     const discountAmount = discount || 0
     const tax = (subtotal - discountAmount) * taxRate
@@ -104,8 +121,8 @@ export async function POST(request: NextRequest) {
       // Create order with 'pending' status (not immediately 'completed')
       const created = await tx.order.create({
         data: {
-          tenantId: decoded.tenantId,
-          employeeId: decoded.employeeId,
+          tenantId: tenantId,
+          employeeId: employeeId,
           customerId: customerId || null,
           orderNumber,
           orderType: 'pos',
@@ -133,53 +150,84 @@ export async function POST(request: NextRequest) {
       for (const item of items) {
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          include: { productIngredients: true }
+          include: { 
+            productIngredients: true,
+            productVariants: {
+              where: { id: item.variantId ?? undefined },
+              include: { variantIngredients: true }
+            }
+          }
         })
 
         if (!product) {
           throw new Error(`Product ${item.productId} not found`)
         }
 
-        if (product.productIngredients) {
-          for (const pi of product.productIngredients) {
-            const reserveQty = pi.quantity * item.quantity
+        // Determine which ingredients to use: variant-specific or product-level
+        let ingredientsToReserve: Array<{ ingredientId: number; quantity: number }> = []
 
-            const ingredient = await tx.ingredient.findUnique({ where: { id: pi.ingredientId } })
-            if (!ingredient) {
-              throw new Error(`Ingredient ${pi.ingredientId} not found for product ${product.id}`)
-            }
-
-            // Check: available stock = currentStock - reservedStock
-            const availableStock = ingredient.currentStock - ingredient.reservedStock
-            if (availableStock < reserveQty) {
-              throw new Error(`Insufficient stock for ${ingredient.name}. Required: ${reserveQty}, Available: ${availableStock}`)
-            }
-
-            // Reserve the stock (increment reservedStock, don't touch currentStock)
-            await tx.ingredient.update({
-              where: { id: pi.ingredientId },
-              data: { reservedStock: { increment: reserveQty } }
-            })
-
-            // Log the reservation (type: 'reserved')
-            await tx.inventoryTransaction.create({
-              data: {
-                tenantId: decoded.tenantId,
-                ingredientId: pi.ingredientId,
-                type: 'reserved',
-                quantity: reserveQty,
-                reason: `POS Order ${orderNumber} - RESERVED`,
-                performedBy: decoded.employeeId
-              }
-            })
+        if (item.variantId && product.productVariants.length > 0) {
+          // Use variant-specific ingredients
+          const variant = product.productVariants[0]
+          if (variant.variantIngredients.length > 0) {
+            ingredientsToReserve = variant.variantIngredients.map(vi => ({
+              ingredientId: vi.ingredientId,
+              quantity: vi.quantity
+            }))
+          } else {
+            // Variant has no specific ingredients, fall back to product ingredients
+            ingredientsToReserve = product.productIngredients.map(pi => ({
+              ingredientId: pi.ingredientId,
+              quantity: pi.quantity
+            }))
           }
+        } else {
+          // Use product-level ingredients
+          ingredientsToReserve = product.productIngredients.map(pi => ({
+            ingredientId: pi.ingredientId,
+            quantity: pi.quantity
+          }))
+        }
+
+        // Reserve each ingredient
+        for (const ing of ingredientsToReserve) {
+          const reserveQty = ing.quantity * item.quantity
+
+          const ingredient = await tx.ingredient.findUnique({ where: { id: ing.ingredientId } })
+          if (!ingredient) {
+            throw new Error(`Ingredient ${ing.ingredientId} not found for product ${product.id}`)
+          }
+
+          // Check: available stock = currentStock - reservedStock
+          const availableStock = ingredient.currentStock - ingredient.reservedStock
+          if (availableStock < reserveQty) {
+            throw new Error(`Insufficient stock for ${ingredient.name}. Required: ${reserveQty}, Available: ${availableStock}`)
+          }
+
+          // Reserve the stock (increment reservedStock, don't touch currentStock)
+          await tx.ingredient.update({
+            where: { id: ing.ingredientId },
+            data: { reservedStock: { increment: reserveQty } }
+          })
+
+          // Log the reservation (type: 'reserved')
+          await tx.inventoryTransaction.create({
+            data: {
+              tenantId: tenantId,
+              ingredientId: ing.ingredientId,
+              type: 'reserved',
+              quantity: reserveQty,
+              reason: `POS Order ${orderNumber} - RESERVED`,
+              performedBy: employeeId
+            }
+          })
         }
       }
 
       // Update POS session stats
       await tx.pOSSession.updateMany({
         where: {
-          employeeId: decoded.employeeId,
+          employeeId: employeeId,
           isActive: true
         },
         data: {
@@ -193,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     // Log the POS order creation
     await logActivity({
-      tenantId: decoded.tenantId,
+      tenantId: tenantId,
       action: 'ORDER_CREATED',
       details: {
         orderId: order.id,
@@ -203,7 +251,7 @@ export async function POST(request: NextRequest) {
         discount,
         total,
         paymentMethod,
-        employeeId: decoded.employeeId,
+        employeeId: employeeId,
         customerId,
         orderType: 'POS'
       }
@@ -222,9 +270,21 @@ export async function POST(request: NextRequest) {
 // GET /api/pos/orders - Get recent POS orders
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request)
-    if (!decoded) {
+    const session = await getServerSession(authOptions)
+    
+    // Verify session and POS employee status
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { tenantId?: string; userType?: string }
+    if (sessionUser.userType !== 'pos_employee') {
+      return NextResponse.json({ error: 'Only POS employees can view orders' }, { status: 403 })
+    }
+
+    const tenantId = sessionUser.tenantId ? parseInt(sessionUser.tenantId) : null
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Invalid tenant' }, { status: 400 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -232,7 +292,7 @@ export async function GET(request: NextRequest) {
 
     const orders = await prisma.order.findMany({
       where: {
-        tenantId: decoded.tenantId,
+        tenantId: tenantId,
         orderType: 'pos'
       },
       include: {

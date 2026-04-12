@@ -210,6 +210,7 @@ export function UpgradeFlowModal({
           amount: Math.round(proration.amountDue * 100), // Convert PHP to centavos for storage
           gcashTransactionId: gcashReference,
           gcashProof: gcashProofData,
+          planName: newPlan.name,
         }),
       });
 

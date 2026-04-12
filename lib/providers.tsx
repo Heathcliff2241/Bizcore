@@ -2,6 +2,7 @@
 
 import { SessionProvider } from 'next-auth/react'
 import { Toaster } from 'react-hot-toast'
+import type { Session } from 'next-auth'
 
 // Root provider for admin/dashboard areas
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -14,13 +15,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 // Storefront provider for customer areas
-export function CustomerProviders({ children }: { children: React.ReactNode }) {
+export function CustomerProviders({ children, session }: { children: React.ReactNode; session?: Session | null }) {
   return (
     <SessionProvider
-      basePath="/api/customer-auth"
-      refetchInterval={30} // 30 seconds for faster updates
-      refetchOnWindowFocus={true}
-      refetchOnReconnect={true}
+      basePath="/api/auth"
+      session={session}
     >
       {children}
       <Toaster position="bottom-right" />

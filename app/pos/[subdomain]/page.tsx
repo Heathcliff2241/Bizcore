@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShoppingCartIcon,
   XMarkIcon,
   CheckCircleIcon,
-  ArrowRightIcon,
   SparklesIcon,
   PowerIcon,
   CurrencyDollarIcon,
@@ -26,6 +27,7 @@ interface ProductVariant {
   name: string
   price: number
   isActive: boolean
+  stockQuantity?: number
 }
 
 interface Product {
@@ -35,16 +37,15 @@ interface Product {
   image?: string
   stockQuantity?: number
   category?: { name: string }
-  variants?: ProductVariant[]
+  productVariants?: ProductVariant[]
 }
 
 interface CartItem {
   product: Product
-  variantId?: number
-  variantName?: string
-  variantPrice?: number
+  variant?: ProductVariant
   quantity: number
   notes?: string
+  itemPrice: number
 }
 
 interface EmployeeInfo {
@@ -65,6 +66,7 @@ export default function POSPage() {
   const params = useParams()
   const router = useRouter()
   const subdomain = params.subdomain as string
+  const { data: session, status } = useSession()
 
   const [employee, setEmployee] = useState<EmployeeInfo | null>(null)
   const [tenant, setTenant] = useState<TenantInfo | null>(null)
@@ -86,74 +88,82 @@ export default function POSPage() {
   const [categories, setCategories] = useState<string[]>([])
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash')
   const [processingOrder, setProcessingOrder] = useState(false)
-  const [showVariantModal, setShowVariantModal] = useState(false)
-  const [selectedProductForVariant, setSelectedProductForVariant] = useState<Product | null>(null)
+  const [variantModalProduct, setVariantModalProduct] = useState<Product | null>(null)
+  const [variantModalQuantity, setVariantModalQuantity] = useState(1)
+  const [receipt, setReceipt] = useState<any>(null)
+  const [showReceipt, setShowReceipt] = useState(false)
 
-  useEffect(() => {
-    // Check auth
-    const token = localStorage.getItem('pos_token')
-    const storedEmployee = localStorage.getItem('pos_employee')
-    const storedTenant = localStorage.getItem('pos_tenant')
-
-    if (!token || !storedEmployee || !storedTenant) {
-      // POS login route is hosted under /pos/[subdomain]/login (not under /storefront)
-      router.push(`/pos/${subdomain}/login`)
-      return
-    }
-
-    const employeeData = JSON.parse(storedEmployee) as EmployeeInfo
-    const tenantData = JSON.parse(storedTenant) as TenantInfo
-    setEmployee(employeeData)
-    setTenant(tenantData)
-
-    // Load tax settings from stored settings (set during login)
-    const storedSettings = localStorage.getItem('pos_settings')
-    if (storedSettings) {
-      try {
-        const settings = JSON.parse(storedSettings) as Record<string, unknown> | null
-        if (settings && 'tax' in settings) {
-          const taxConfig = settings.tax as Record<string, unknown> | null
-          if (taxConfig && typeof taxConfig.defaultTaxPercent === 'number') {
-            setTenantTaxRate(taxConfig.defaultTaxPercent)
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse stored settings:', error)
+  // Check authentication and redirect if not authenticated
+  const loadProductsAndSettings = useCallback(async () => {
+    try {
+      // Get employee and tenant info from session
+      const sessionUser = session?.user as { id?: string; name?: string; email?: string; role?: string; tenantId?: string; subdomain?: string; userType?: string }
+      if (!sessionUser.id || !sessionUser.tenantId) {
+        router.push(`/pos/${subdomain}/login`)
+        return
       }
-    }
 
-    const loadProducts = async () => {
+      const employeeData: EmployeeInfo = {
+        id: parseInt(sessionUser.id),
+        firstName: sessionUser.name?.split(' ')[0] || 'Employee',
+        lastName: sessionUser.name?.split(' ').slice(1).join(' ') || '',
+        email: sessionUser.email || '',
+        role: (sessionUser.role as 'cashier' | 'manager' | 'admin') || 'cashier'
+      }
+
+      const tenantData: TenantInfo = {
+        id: parseInt(sessionUser.tenantId),
+        name: 'Store',
+        subdomain: sessionUser.subdomain || subdomain
+      }
+
+      setEmployee(employeeData)
+      setTenant(tenantData)
+
+      // Fetch products from API
       try {
-        const res = await fetch('/api/pos/products', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-
+        const res = await fetch('/api/pos/products')
         const data = await res.json()
 
-        if (!res.ok) {
-          console.error('Failed to fetch products:', data?.error ?? res.statusText)
-          return
-        }
-
-        if (Array.isArray(data.products)) {
+        if (res.ok && Array.isArray(data.products)) {
           setProducts(data.products)
-
           const cats = new Set<string>(
             data.products.map((product: Product) => product.category?.name ?? 'Uncategorized')
           )
           setCategories(['all', ...Array.from(cats)])
+          
+          // Set default tax rate (can be customized per tenant)
+          setTenantTaxRate(12) // Default 12% tax rate
         }
       } catch (error) {
         console.error('Failed to fetch products:', error)
       } finally {
         setLoading(false)
       }
+    } catch (error) {
+      console.error('Failed to load settings:', error)
+      setLoading(false)
+    }
+  }, [session?.user, subdomain, router])
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push(`/pos/${subdomain}/login`)
+      return
     }
 
-    void loadProducts()
-  }, [router, subdomain])
+    if (status === 'authenticated' && session?.user) {
+      const sessionUser = session.user as { userType?: string }
+      if (sessionUser.userType !== 'pos_employee') {
+        // Non-POS employees shouldn't access this page
+        router.push(`/pos/${subdomain}/login`)
+        return
+      }
+
+      // Load products and settings using NextAuth session
+      loadProductsAndSettings()
+    }
+  }, [status, session, router, subdomain, loadProductsAndSettings])
 
   // Save POS cart to localStorage whenever it changes
   useEffect(() => {
@@ -166,99 +176,86 @@ export default function POSPage() {
     }
   }, [cart, subdomain])
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, variant?: ProductVariant) => {
+    // Determine which stock to check
+    const availableStock = variant ? (variant.stockQuantity ?? 0) : (product.stockQuantity ?? 0)
+    
     // Check if product is in stock
-    if ((product.stockQuantity ?? 0) <= 0) {
+    if (availableStock <= 0) {
       alert('This product is out of stock')
       return
     }
 
-    // If product has variants, show variant selection modal
-    if ((product.variants?.length ?? 0) > 0) {
-      setSelectedProductForVariant(product)
-      setShowVariantModal(true)
+    // If product has variants and no variant is selected, show modal
+    if ((product.productVariants?.length ?? 0) > 0 && !variant) {
+      setVariantModalProduct(product)
+      setVariantModalQuantity(1)
       return
     }
 
-    const existing = cart.find(item => item.product.id === product.id && !item.variantId)
+    // Determine the final price
+    const itemPrice = variant ? variant.price : product.price
+
+    const existing = cart.find(item => 
+      item.product.id === product.id && 
+      (!variant || item.variant?.id === variant.id)
+    )
     
     // Check if adding more would exceed available stock
     const requestedQuantity = existing ? existing.quantity + 1 : 1
-    if (requestedQuantity > (product.stockQuantity ?? 0)) {
-      alert(`Only ${product.stockQuantity} unit(s) available in stock`)
+    if (requestedQuantity > availableStock) {
+      alert(`Only ${availableStock} unit(s) available in stock`)
       return
     }
     
     if (existing) {
       setCart(cart.map(item =>
-        item.product.id === product.id && !item.variantId
+        item.product.id === product.id && (!variant || item.variant?.id === variant.id)
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ))
     } else {
-      setCart([...cart, { product, quantity: 1 }])
+      setCart([...cart, { product, variant, quantity: 1, itemPrice }])
     }
-  }
-
-  const addVariantToCart = (variant: ProductVariant) => {
-    if (!selectedProductForVariant) return
-
-    const product = selectedProductForVariant
-    const existing = cart.find(
-      item => item.product.id === product.id && item.variantId === variant.id
-    )
-
-    const requestedQuantity = existing ? existing.quantity + 1 : 1
-    if (requestedQuantity > (product.stockQuantity ?? 0)) {
-      alert(`Only ${product.stockQuantity} unit(s) available in stock`)
-      return
-    }
-
-    if (existing) {
-      setCart(cart.map(item =>
-        item.product.id === product.id && item.variantId === variant.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ))
-    } else {
-      setCart([...cart, {
-        product,
-        variantId: variant.id,
-        variantName: variant.name,
-        variantPrice: variant.price,
-        quantity: 1
-      }])
-    }
-
-    setShowVariantModal(false)
-    setSelectedProductForVariant(null)
   }
 
   const removeFromCart = (productId: number, variantId?: number) => {
-    setCart(cart.filter(item => {
-      if (item.product.id !== productId) return true
-      if (variantId === undefined) return item.variantId !== undefined
-      return item.variantId !== variantId
-    }))
+    setCart(cart.filter(item => !(item.product.id === productId && (variantId ? item.variant?.id === variantId : !item.variant))))
   }
 
-  const updateQuantity = (productId: number, quantity: number, variantId?: number) => {
+  const updateQuantity = (productId: number, variantId: number | undefined, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId, variantId)
-    } else {
-      setCart(cart.map(item =>
-        item.product.id === productId && item.variantId === variantId
-          ? { ...item, quantity }
-          : item
-      ))
+      return
     }
+
+    // Find the cart item to check available stock
+    const cartItem = cart.find(item => 
+      item.product.id === productId && (variantId ? item.variant?.id === variantId : !item.variant)
+    )
+
+    if (!cartItem) return
+
+    // Check available stock based on variant or product
+    const availableStock = variantId 
+      ? cartItem.variant?.stockQuantity ?? 0
+      : cartItem.product.stockQuantity ?? 0
+
+    // Validate quantity doesn't exceed stock
+    if (quantity > availableStock) {
+      alert(`Only ${availableStock} unit(s) available in stock`)
+      return
+    }
+
+    setCart(cart.map(item =>
+      item.product.id === productId && (variantId ? item.variant?.id === variantId : !item.variant)
+        ? { ...item, quantity }
+        : item
+    ))
   }
 
   const calculateTotal = () => {
-    const subtotal = cart.reduce((sum, item) => {
-      const price = item.variantPrice ?? item.product.price
-      return sum + (price * item.quantity)
-    }, 0)
+    const subtotal = cart.reduce((sum, item) => sum + (item.itemPrice * item.quantity), 0)
     const tax = subtotal * (tenantTaxRate / 100)
     return { subtotal, tax, total: subtotal + tax }
   }
@@ -269,9 +266,9 @@ export default function POSPage() {
     setProcessingOrder(true)
 
     try {
-      const token = localStorage.getItem('pos_token')
       const items = cart.map(item => ({
         productId: item.product.id,
+        variantId: item.variant?.id ?? null,
         quantity: item.quantity,
         notes: item.notes
       }))
@@ -279,26 +276,25 @@ export default function POSPage() {
       const res = await fetch('/api/pos/orders', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           items,
           paymentMethod,
           discount: 0
-        })
+        }),
+        credentials: 'include' // Include cookies for NextAuth session
       })
 
       if (res.ok) {
         const data = await res.json()
         
         // Clear cart
-  setCart([])
+        setCart([])
         
-        // Show success message
-        alert(`Order ${data.order.orderNumber} completed successfully!`)
-        
-        // TODO: Show print receipt option
+        // Show receipt modal
+        setReceipt(data.order)
+        setShowReceipt(true)
       } else {
         const error = await res.json()
         alert(error.error || 'Failed to process order')
@@ -311,10 +307,8 @@ export default function POSPage() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('pos_token')
-    localStorage.removeItem('pos_employee')
-    localStorage.removeItem('pos_tenant')
+  const handleLogout = async () => {
+    await signOut({ redirect: false })
     router.push(`/pos/${subdomain}/login`)
   }
 
@@ -469,6 +463,7 @@ export default function POSPage() {
                 >
                   {filteredProducts.map((product, idx) => {
                     const isOutOfStock = (product.stockQuantity ?? 0) <= 0
+                    const hasVariants = (product.productVariants?.length ?? 0) > 0
                     
                     return (
                     <motion.button
@@ -480,7 +475,7 @@ export default function POSPage() {
                       whileTap={!isOutOfStock ? { scale: 0.98 } : {}}
                       onClick={() => addToCart(product)}
                       disabled={isOutOfStock}
-                      className={`bg-gradient-to-br from-white to-slate-50 rounded-xl md:rounded-2xl p-3 md:p-4 transition-all duration-200 text-left group border border-slate-200/50 ${
+                      className={`relative bg-gradient-to-br from-white to-slate-50 rounded-xl md:rounded-2xl p-3 md:p-4 transition-all duration-200 text-left group border border-slate-200/50 ${
                         isOutOfStock 
                           ? 'opacity-50 cursor-not-allowed' 
                           : 'hover:shadow-xl hover:border-blue-300/50'
@@ -491,15 +486,15 @@ export default function POSPage() {
                           <span className="text-sm font-semibold text-red-700">Out of Stock</span>
                         </div>
                       )}
-                      <div className="relative mb-2 md:mb-3 overflow-hidden rounded-lg md:rounded-xl bg-slate-100">
+                      <div className="relative mb-2 md:mb-3 overflow-hidden rounded-lg md:rounded-xl bg-slate-100 z-0">
                         {product.image ? (
-                          <motion.div whileHover={!isOutOfStock ? { scale: 1.1 } : {}} className="overflow-hidden">
+                          <motion.div whileHover={!isOutOfStock ? { scale: 1.1 } : {}} className="overflow-hidden relative z-0">
                             <Image
                               src={product.image}
                               alt={product.name}
                               width={240}
                               height={128}
-                              className={`w-full h-24 md:h-32 object-cover ${isOutOfStock ? 'grayscale' : ''}`}
+                              className={`w-full h-24 md:h-32 object-cover relative z-0 ${isOutOfStock ? 'grayscale' : ''}`}
                             />
                           </motion.div>
                         ) : (
@@ -508,20 +503,31 @@ export default function POSPage() {
                           </div>
                         )}
                       </div>
+                      {hasVariants && (
+                        <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-lg z-10">
+                          {product.productVariants?.length} sizes
+                        </div>
+                      )}
                       <h3 className="font-semibold text-slate-900 line-clamp-2 text-sm md:text-base mb-1 md:mb-2">
                         {product.name}
                       </h3>
                       <div className="flex items-end justify-between gap-2">
-                        <motion.p
-                          whileHover={!isOutOfStock ? { scale: 1.05 } : {}}
-                          className={`text-base md:text-lg font-bold ${
-                            isOutOfStock
-                              ? 'text-gray-400'
-                              : 'bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent'
-                          }`}
-                        >
-                          ₱{product.price.toFixed(2)}
-                        </motion.p>
+                        <div className="flex-1">
+                          {hasVariants ? (
+                            <p className="text-xs text-slate-500 font-medium">Click to select size</p>
+                          ) : (
+                            <motion.p
+                              whileHover={!isOutOfStock ? { scale: 1.05 } : {}}
+                              className={`text-base md:text-lg font-bold ${
+                                isOutOfStock
+                                  ? 'text-gray-400'
+                                  : 'bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent'
+                              }`}
+                            >
+                              ₱{product.price.toFixed(2)}
+                            </motion.p>
+                          )}
+                        </div>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg whitespace-nowrap ${
                           (product.stockQuantity ?? 0) > 5
                             ? 'bg-emerald-100 text-emerald-700'
@@ -581,7 +587,7 @@ export default function POSPage() {
               ) : (
                 cart.map((item, idx) => (
                   <motion.div
-                    key={item.product.id}
+                    key={`${item.product.id}-${item.variant?.id ?? 'base'}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
@@ -591,12 +597,12 @@ export default function POSPage() {
                     <div className="flex justify-between items-start gap-2 md:gap-3 mb-2 md:mb-3">
                       <h3 className="font-semibold text-slate-900 text-sm md:text-base line-clamp-1 flex-1">
                         {item.product.name}
-                        {item.variantName && <span className="text-slate-600"> - {item.variantName}</span>}
+                        {item.variant && <span className="text-slate-600"> - {item.variant.name}</span>}
                       </h3>
                       <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => removeFromCart(item.product.id, item.variantId)}
+                        onClick={() => removeFromCart(item.product.id, item.variant?.id)}
                         className="text-slate-400 hover:text-red-500 flex-shrink-0 p-1"
                       >
                         <XMarkIcon className="w-4 h-4 md:w-5 md:h-5" />
@@ -608,7 +614,7 @@ export default function POSPage() {
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.variantId)}
+                          onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity - 1)}
                           className="w-6 h-6 md:w-7 md:h-7 rounded text-slate-600 hover:text-red-600 hover:bg-red-50 flex items-center justify-center text-sm font-bold transition-colors"
                         >
                           −
@@ -619,7 +625,7 @@ export default function POSPage() {
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.variantId)}
+                          onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity + 1)}
                           className="w-6 h-6 md:w-7 md:h-7 rounded text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center text-sm font-bold transition-colors"
                         >
                           +
@@ -627,10 +633,10 @@ export default function POSPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs md:text-sm text-slate-500">
-                          ₱{(item.variantPrice ?? item.product.price).toFixed(2)} each
+                          ₱{item.itemPrice.toFixed(2)} each
                         </p>
                         <p className="font-bold text-blue-600 text-sm md:text-base">
-                          ₱{((item.variantPrice ?? item.product.price) * item.quantity).toFixed(2)}
+                          ₱{(item.itemPrice * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -749,53 +755,264 @@ export default function POSPage() {
 
       {/* Variant Selection Modal */}
       <AnimatePresence>
-        {showVariantModal && selectedProductForVariant && (
+        {variantModalProduct && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-            onClick={() => setShowVariantModal(false)}
+            onClick={() => setVariantModalProduct(null)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6"
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
             >
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">Select Size</h2>
-                <p className="text-slate-600 text-sm mt-2">{selectedProductForVariant.name}</p>
-              </div>
-
-              <div className="space-y-3 max-h-96 overflow-y-auto mb-6">
-                {(selectedProductForVariant.variants ?? []).map((variant) => (
-                  <motion.button
-                    key={variant.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => addVariantToCart(variant)}
-                    className="w-full p-4 border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-left"
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      Select Size
+                    </h3>
+                    <p className="text-sm text-blue-100 mt-1">
+                      {variantModalProduct.name}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setVariantModalProduct(null)}
+                    className="text-white hover:text-blue-100 transition-colors"
                   >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-slate-900">{variant.name}</p>
-                      </div>
-                      <p className="font-bold text-lg text-blue-600">₱{variant.price.toFixed(2)}</p>
-                    </div>
-                  </motion.button>
-                ))}
+                    <XMarkIcon className="w-6 h-6" />
+                  </button>
+                </div>
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowVariantModal(false)}
-                className="w-full py-3 bg-slate-100 text-slate-900 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </motion.button>
+              {/* Variants List */}
+              <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
+                {variantModalProduct.productVariants?.map((variant) => {
+                  const isOutOfStock = (variant.stockQuantity ?? 0) <= 0
+                  
+                  return (
+                  <motion.div
+                    key={variant.id}
+                    className={`p-4 border-2 rounded-lg transition-all ${
+                      isOutOfStock 
+                        ? 'border-red-200 bg-red-50 opacity-60 cursor-not-allowed' 
+                        : 'border-slate-200 hover:border-blue-500 hover:bg-blue-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="font-semibold text-slate-900">
+                          {variant.name}
+                        </p>
+                        <p className={`text-xs mt-1 ${
+                          isOutOfStock 
+                            ? 'text-red-600 font-semibold' 
+                            : 'text-slate-500'
+                        }`}>
+                          {isOutOfStock 
+                            ? 'Out of Stock' 
+                            : `${variant.stockQuantity ?? 0} available`
+                          }
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg text-blue-600">
+                          ₱{variant.price.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={!isOutOfStock ? { scale: 1.02 } : {}}
+                      whileTap={!isOutOfStock ? { scale: 0.98 } : {}}
+                      onClick={() => {
+                        if (!isOutOfStock) {
+                          addToCart(variantModalProduct, variant)
+                          setVariantModalProduct(null)
+                          setVariantModalQuantity(1)
+                        }
+                      }}
+                      disabled={isOutOfStock}
+                      className={`w-full py-2 px-3 font-semibold rounded-lg transition-colors text-sm ${
+                        isOutOfStock
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+                    </motion.button>
+                  </motion.div>
+                  )
+                })}
+              </div>
+
+              {/* Quantity Selector */}
+              <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
+                <label className="block text-sm font-semibold text-slate-700 mb-3">
+                  Quantity
+                </label>
+                <div className="flex items-center space-x-4">
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() =>
+                      setVariantModalQuantity(Math.max(1, variantModalQuantity - 1))
+                    }
+                    className="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                  >
+                    −
+                  </motion.button>
+                  <span className="text-xl font-bold text-slate-900 w-12 text-center">
+                    {variantModalQuantity}
+                  </span>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() =>
+                      setVariantModalQuantity(variantModalQuantity + 1)
+                    }
+                    className="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                  >
+                    +
+                  </motion.button>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="border-t border-slate-200 px-6 py-4 flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setVariantModalProduct(null)}
+                  className="flex-1 py-2 px-4 border-2 border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Receipt Modal */}
+      <AnimatePresence>
+        {showReceipt && receipt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+              {/* Receipt Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 text-center rounded-t-2xl">
+                <CheckCircleIcon className="w-12 h-12 mx-auto mb-3" />
+                <h2 className="text-2xl font-bold mb-1">Order Confirmed!</h2>
+                <p className="text-blue-100">Order #{receipt.orderNumber}</p>
+              </div>
+
+              {/* Receipt Content */}
+              <div className="p-6 space-y-4">
+                {/* Order Number and Time */}
+                <div className="text-center pb-4 border-b border-slate-200">
+                  <p className="text-sm text-slate-500">Completed at</p>
+                  <p className="text-slate-900 font-semibold">
+                    {new Date(receipt.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Items */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-slate-900 mb-3">Items</h3>
+                  {receipt.orderItems?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-sm py-2 border-b border-slate-100">
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">{item.product?.name}</p>
+                        {item.variant && (
+                          <p className="text-xs text-slate-500">{item.variant.name}</p>
+                        )}
+                        <p className="text-xs text-slate-500">Qty: {item.quantity}</p>
+                      </div>
+                      <p className="font-semibold text-slate-900">
+                        ₱{(item.price * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Totals */}
+                <div className="bg-slate-50 rounded-lg p-4 space-y-2 border border-slate-200">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Subtotal</span>
+                    <span className="text-slate-900 font-semibold">
+                      ₱{((receipt.total - receipt.tax).toFixed(2))}
+                    </span>
+                  </div>
+                  {receipt.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Discount</span>
+                      <span className="text-red-600 font-semibold">
+                        -₱{receipt.discount.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Tax (12%)</span>
+                    <span className="text-slate-900 font-semibold">
+                      ₱{receipt.tax.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-slate-200">
+                    <span className="font-bold text-slate-900">Total</span>
+                    <span className="text-lg font-bold text-indigo-600">
+                      ₱{receipt.total.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment Method */}
+                <div className="text-center py-2 px-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-slate-600 mb-1">Payment Method</p>
+                  <p className="text-sm font-semibold text-slate-900 capitalize">
+                    {receipt.paymentMethod === 'gcash' ? 'GCash' : 'Cash'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Receipt Footer */}
+              <div className="border-t border-slate-200 p-6 flex gap-3 bg-slate-50 rounded-b-2xl">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => window.print()}
+                  className="flex-1 py-3 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4" />
+                  </svg>
+                  Print Receipt
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setShowReceipt(false)
+                    setReceipt(null)
+                  }}
+                  className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 font-semibold rounded-lg hover:bg-slate-300 transition-colors"
+                >
+                  Close
+                </motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}

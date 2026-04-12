@@ -56,6 +56,19 @@ export function LoginForm({
     setLoading(true)
 
     try {
+      // Clear any stale session cookies before attempting login
+      try {
+        await fetch('/api/auth/clear-session', { 
+          method: 'POST',
+          credentials: 'include'
+        })
+      } catch (err) {
+        console.warn('[LOGIN FORM] Failed to clear session:', err)
+      }
+
+      // Small delay to ensure cookies are cleared
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // CUSTOMER LOGIN
       if (storefront?.subdomain) {
         const res = await signIn("customer-credentials", {

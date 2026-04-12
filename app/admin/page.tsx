@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { RecentActivityWidget } from '@/components/admin/RecentActivityWidget'
+import { RecentItemsWidget } from '@/components/dashboard/RecentItemsWidget'
 import {
   BuildingOfficeIcon,
   UsersIcon,
@@ -164,40 +165,54 @@ export default function AdminDashboard() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-transparent to-indigo-900" />
       </div>
 
-      <div className="relative z-10 px-6 md:px-8 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
+      <div className="relative z-10 px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8">
+        <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="mb-12"
+        className="mb-6 sm:mb-8 md:mb-12"
       >
-        <h1 className="text-4xl md:text-5xl font-bold text-blue-900 mb-3">Dashboard</h1>
-        <p className="text-lg text-blue-700">Welcome back! Here&apos;s your system overview</p>
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-blue-900 mb-2 sm:mb-3">Dashboard</h1>
+        <p className="text-base sm:text-lg text-blue-700">Welcome back! Here&apos;s your system overview</p>
       </motion.div>
+
+      {/* Recent Items Widget */}
+      {!loading && (
+        <RecentItemsWidget
+          theme={{
+            primary: '#3b82f6',
+            secondary: '#8b5cf6',
+            accent: '#ec4899',
+            background: '#f9fafb',
+            surface: '#ffffff',
+            text: '#111827',
+          }}
+        />
+      )}
 
       {/* KPI Grid */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
       >
         {kpis.map((kpi, idx) => (
           <motion.div key={idx} variants={itemVariants}>
             <motion.div
               whileHover={{ y: -6, boxShadow: '0 20px 40px rgba(59, 130, 246, 0.12)' }}
-              className="bg-white rounded-2xl p-6 md:p-8 border border-blue-100/60 hover:border-blue-200 transition-all duration-300 group"
+              className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 border border-blue-100/60 hover:border-blue-200 transition-all duration-300 group"
             >
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex-1">
-                  <p className="text-blue-600 text-xs font-semibold uppercase tracking-wider mb-2">{kpi.label}</p>
+              <div className="flex items-start justify-between mb-4 sm:mb-6">
+                <div className="flex-1 min-w-0">
+                  <p className="text-blue-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-1 sm:mb-2">{kpi.label}</p>
                   <motion.h3
                     initial={{ scale: 0.8 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="text-3xl md:text-4xl font-bold text-blue-900 group-hover:text-blue-800 transition-colors"
+                    className="text-2xl sm:text-3xl md:text-4xl font-bold text-blue-900 group-hover:text-blue-800 transition-colors break-words"
                   >
                     {kpi.value}
                   </motion.h3>
@@ -206,7 +221,7 @@ export default function AdminDashboard() {
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.1 }}
-                  className={`p-4 rounded-xl bg-gradient-to-br ${colorSchemes[kpi.color]} flex-shrink-0`}
+                  className={`p-3 sm:p-4 rounded-lg sm:rounded-xl bg-gradient-to-br ${colorSchemes[kpi.color]} flex-shrink-0`}
                 >
                   {kpi.icon}
                 </motion.div>
@@ -238,22 +253,22 @@ export default function AdminDashboard() {
         ))}
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
         {/* Alerts */}
         <motion.div
           variants={itemVariants}
           className="lg:col-span-1"
         >
           <motion.div
-            className="bg-white rounded-2xl p-6 md:p-8 border border-blue-100/60 h-full"
+            className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 border border-blue-100/60 h-full"
           >
-            <h2 className="text-lg font-bold text-blue-900 mb-6 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                <ExclamationTriangleIcon className="w-5 h-5 text-amber-600" />
+            <h2 className="text-base sm:text-lg font-bold text-blue-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+              <div className="p-1.5 sm:p-2 rounded-lg bg-amber-50 border border-amber-200 flex-shrink-0">
+                <ExclamationTriangleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" />
               </div>
-              System Alerts
+              <span className="break-words">System Alerts</span>
             </h2>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-2 sm:space-y-3 max-h-96 overflow-y-auto">
               {stats?.alerts && stats.alerts.length > 0 ? (
                 stats.alerts.map((alert, idx) => (
                   <motion.div
@@ -261,7 +276,7 @@ export default function AdminDashboard() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
-                    className={`p-4 rounded-lg border-l-4 ${
+                    className={`p-3 sm:p-4 rounded-lg border-l-4 ${
                       alert.severity === 'high'
                         ? 'bg-red-50 border-red-300 text-red-900'
                         : alert.severity === 'medium'
@@ -269,13 +284,13 @@ export default function AdminDashboard() {
                         : 'bg-blue-50 border-blue-300 text-blue-900'
                     }`}
                   >
-                    <p className="text-sm font-medium">{alert.message}</p>
+                    <p className="text-xs sm:text-sm font-medium break-words">{alert.message}</p>
                   </motion.div>
                 ))
               ) : (
-                <div className="text-center py-8 text-blue-600">
-                  <CheckCircleIcon className="w-10 h-10 mx-auto mb-2 text-emerald-500" />
-                  <p className="text-sm">No active alerts</p>
+                <div className="text-center py-6 sm:py-8 text-blue-600">
+                  <CheckCircleIcon className="w-8 h-8 sm:w-10 sm:h-10 mx-auto mb-2 text-emerald-500" />
+                  <p className="text-xs sm:text-sm">No active alerts</p>
                 </div>
               )}
             </div>

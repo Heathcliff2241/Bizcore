@@ -1,0 +1,2 @@
+// ARCHIVED: [id] route moved to [productId]
+// ARCHIVED: [slug] route removed - only home page is customizable via BrandStudio

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import type { CSSProperties } from 'react'
+import { shouldLazyLoad } from './utils/responsiveImages'
 
 interface FreeformImageProps {
   src?: string | null
@@ -91,6 +92,8 @@ export function FreeformImage({
       <img
         src={resolvedSrc}
         alt={alt ?? ''}
+        loading={shouldLazyLoad(false)}
+        decoding="async"
         style={{
           maxWidth: '100%',
           maxHeight: '100%',

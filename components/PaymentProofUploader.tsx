@@ -141,11 +141,14 @@ export const PaymentProofUploadComponent: React.FC<PaymentProofUploaderProps> = 
       {preview && (
         <div className="mt-4">
           <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-          <img
-            src={preview}
-            alt="Payment proof preview"
-            className="w-full h-48 object-cover rounded-lg border border-gray-200"
-          />
+          <div className="relative w-full h-48 rounded-lg border border-gray-200 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview}
+              alt="Payment proof preview"
+              className="w-full h-full object-cover"
+            />
+          </div>
           {fileSize && <p className="text-xs text-gray-500 mt-2">Size: {fileSize}</p>}
         </div>
       )}

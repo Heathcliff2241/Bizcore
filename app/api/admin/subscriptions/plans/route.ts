@@ -22,6 +22,20 @@ export async function GET() {
       orderBy: { displayOrder: 'asc' },
     })
 
+    // Get tenant count per plan
+    const subscriptions = await prisma.subscription.groupBy({
+      by: ['planId'],
+      _count: {
+        id: true
+      }
+    })
+
+    // Create a map of plan counts
+    const planCountMap = new Map()
+    subscriptions.forEach(sub => {
+      planCountMap.set(sub.planId, sub._count.id)
+    })
+
     return NextResponse.json({
       plans: plans.map(plan => ({
         id: plan.id,
@@ -30,7 +44,7 @@ export async function GET() {
         billingCycle: plan.billingCycle,
         description: plan.description,
         features: plan.features,
-        tenantCount: 0,
+        tenantCount: planCountMap.get(plan.id) || 0,
         isActive: plan.isActive,
       })),
     })

@@ -1,51 +1,64 @@
 import NextAuth from 'next-auth'
+import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
-const setCookieParser = require('set-cookie-parser')
 
 const handler = NextAuth(authOptions)
 
+/**
+ * Clear corrupted session cookies when JWT decryption fails
+ * This prevents the "Invalid Compact JWE" error loop
+ */
+function clearCorruptedCookies(): NextResponse {
+  const cookieSecure = process.env.NEXTAUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production'
+  const securePart = cookieSecure ? 'Secure; ' : ''
+  const cookieBase = `Path=/; HttpOnly; ${securePart}SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT;`
+
+  const response = NextResponse.json({ 
+    error: 'Session expired or invalid. Please sign in again.',
+    cleared: true 
+  }, { status: 401 })
+  
+  // Clear all auth cookies
+  response.headers.append('Set-Cookie', `next-auth.session-token=; ${cookieBase}`)
+  response.headers.append('Set-Cookie', `next-auth.csrf-token=; Path=/; ${securePart}SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT;`)
+  response.headers.append('Set-Cookie', `next-auth.callback-url=; Path=/; ${securePart}SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT;`)
+  
+  console.log('[AUTH] Cleared corrupted session cookies')
+  return response
+}
+
+// Simply pass requests through to NextAuth handler
+// Note: Cookie sanitization happens inside NextAuth if needed
 export async function GET(req: Request, props: { params: Promise<{ nextauth: string[] }> }) {
   const params = await props.params
-  // Sanitize invalid session token cookies to avoid JWE/JWS mismatch errors
-  const cookieHeader = req.headers.get('cookie') || ''
-  const cookies = cookieHeader.split(';').map(c => c.trim()).filter(Boolean)
-  const sessionCookie = cookies.find(c => c.startsWith('next-auth.session-token='))
-  if (sessionCookie) {
-    const token = sessionCookie.split('=')[1] || ''
-    const dotCount = (token.match(/\./g) || []).length
-    // If the token is not a JWE (4 dots) then it's likely stale or JWS; remove to prevent decrypt errors
-    if (dotCount !== 4) {
-      console.log('[AUTH_ROUTE] Removing invalid next-auth.session-token cookie (not JWE) to prevent decrypt errors')
-      const newHeaders = new Headers(req.headers)
-      // Remove cookie header entirely to avoid NextAuth reading invalid tokens
-      newHeaders.delete('cookie')
-      const sanitizedReq = new Request(req.url, { headers: newHeaders, method: req.method })
-      return handler(sanitizedReq as Request, { params })
+  
+  try {
+    return await handler(req, { params })
+  } catch (error: unknown) {
+    // Check if this is a JWT decryption error (corrupted cookie)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('Invalid Compact JWE') || errorMessage.includes('JWE')) {
+      console.warn('[AUTH] JWT decryption failed - clearing corrupted cookies')
+      return clearCorruptedCookies()
     }
+    throw error
   }
-  const response = await handler(req, { params })
-  return response
 }
 
 export async function POST(req: Request, props: { params: Promise<{ nextauth: string[] }> }) {
   const params = await props.params
-  // Sanitize invalid session token cookies to avoid JWE/JWS mismatch errors
-  const cookieHeader = req.headers.get('cookie') || ''
-  const cookies = cookieHeader.split(';').map(c => c.trim()).filter(Boolean)
-  const sessionCookie = cookies.find(c => c.startsWith('next-auth.session-token='))
-  if (sessionCookie) {
-    const token = sessionCookie.split('=')[1] || ''
-    const dotCount = (token.match(/\./g) || []).length
-    if (dotCount !== 4) {
-      console.log('[AUTH_ROUTE] Removing invalid next-auth.session-token cookie (not JWE) to prevent decrypt errors')
-      const newHeaders = new Headers(req.headers)
-      newHeaders.delete('cookie')
-      const sanitizedReq = new Request(req.url, { headers: newHeaders, method: req.method, body: req.body as any })
-      return handler(sanitizedReq as Request, { params })
+  
+  try {
+    return await handler(req, { params })
+  } catch (error: unknown) {
+    // Check if this is a JWT decryption error (corrupted cookie)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('Invalid Compact JWE') || errorMessage.includes('JWE')) {
+      console.warn('[AUTH] JWT decryption failed - clearing corrupted cookies')
+      return clearCorruptedCookies()
     }
+    throw error
   }
-  const response = await handler(req, { params })
-  return response
 }
 
 // Prevent static generation for this dynamic route

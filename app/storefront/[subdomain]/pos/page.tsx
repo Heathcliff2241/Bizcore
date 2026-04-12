@@ -21,6 +21,13 @@ import {
   BoltIcon
 } from '@heroicons/react/24/outline'
 
+interface ProductVariant {
+  id: number
+  name: string
+  price: number
+  isActive: boolean
+}
+
 interface Product {
   id: number
   name: string
@@ -28,12 +35,15 @@ interface Product {
   image?: string
   stockQuantity?: number
   category?: { name: string }
+  productVariants?: ProductVariant[]
 }
 
 interface CartItem {
   product: Product
+  variant?: ProductVariant
   quantity: number
   notes?: string
+  itemPrice: number
 }
 
 interface EmployeeInfo {
@@ -75,12 +85,17 @@ export default function POSPage() {
   const [categories, setCategories] = useState<string[]>([])
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'digital'>('cash')
   const [processingOrder, setProcessingOrder] = useState(false)
+  const [variantModalProduct, setVariantModalProduct] = useState<Product | null>(null)
+  const [variantModalQuantity, setVariantModalQuantity] = useState(1)
 
   useEffect(() => {
+    console.log('[POS PAGE] Mounted, subdomain:', subdomain)
     // Check auth
     const token = localStorage.getItem('pos_token')
     const storedEmployee = localStorage.getItem('pos_employee')
     const storedTenant = localStorage.getItem('pos_tenant')
+
+    console.log('[POS PAGE] Auth check:', { hasToken: !!token, hasEmployee: !!storedEmployee, hasTenant: !!storedTenant })
 
     if (!token || !storedEmployee || !storedTenant) {
       // POS login route is available under the top-level /pos path so redirect accordingly
@@ -116,13 +131,18 @@ export default function POSPage() {
 
     const loadProducts = async () => {
       try {
+        const token = localStorage.getItem('pos_token')
+        console.log('[POS] Loading products with token:', token ? 'token present' : 'NO TOKEN')
+        
         const res = await fetch('/api/pos/products', {
           headers: {
             Authorization: `Bearer ${token}`
           }
         })
 
+        console.log('[POS] Response status:', res.status)
         const data = await res.json()
+        console.log('[POS] Response data:', data)
 
         if (!res.ok) {
           console.error('Failed to fetch products:', data?.error ?? res.statusText)
@@ -130,6 +150,17 @@ export default function POSPage() {
         }
 
         if (Array.isArray(data.products)) {
+          console.log('[POS] Loaded products:', {
+            count: data.products.length,
+            sample: data.products[0] ? {
+              id: data.products[0].id,
+              name: data.products[0].name,
+              price: data.products[0].price,
+              hasVariants: (data.products[0].productVariants?.length ?? 0) > 0,
+              variantCount: data.products[0].productVariants?.length ?? 0,
+              firstVariant: data.products[0].productVariants?.[0]
+            } : null
+          })
           setProducts(data.products)
 
           const cats = new Set<string>(
@@ -158,14 +189,27 @@ export default function POSPage() {
     }
   }, [cart, subdomain])
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, variant?: ProductVariant) => {
     // Check if product is in stock
     if ((product.stockQuantity ?? 0) <= 0) {
       alert('This product is out of stock')
       return
     }
 
-    const existing = cart.find(item => item.product.id === product.id)
+    // If product has variants and no variant is selected, show modal
+    if ((product.productVariants?.length ?? 0) > 0 && !variant) {
+      setVariantModalProduct(product)
+      setVariantModalQuantity(1)
+      return
+    }
+
+    // Determine the final price
+    const itemPrice = variant ? variant.price : product.price
+
+    const existing = cart.find(item => 
+      item.product.id === product.id && 
+      (!variant || item.variant?.id === variant.id)
+    )
     
     // Check if adding more would exceed available stock
     const requestedQuantity = existing ? existing.quantity + 1 : 1
@@ -176,31 +220,36 @@ export default function POSPage() {
     
     if (existing) {
       setCart(cart.map(item =>
-        item.product.id === product.id
+        item.product.id === product.id && (!variant || item.variant?.id === variant.id)
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ))
     } else {
-      setCart([...cart, { product, quantity: 1 }])
+      setCart([...cart, { product, variant, quantity: 1, itemPrice }])
     }
+    
+    // Close variant modal
+    setVariantModalProduct(null)
   }
 
-  const removeFromCart = (productId: number) => {
-    setCart(cart.filter(item => item.product.id !== productId))
+  const removeFromCart = (productId: number, variantId?: number) => {
+    setCart(cart.filter(item => !(item.product.id === productId && (variantId ? item.variant?.id === variantId : !item.variant))))
   }
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (productId: number, variantId: number | undefined, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(productId)
+      removeFromCart(productId, variantId)
     } else {
       setCart(cart.map(item =>
-        item.product.id === productId ? { ...item, quantity } : item
+        item.product.id === productId && (variantId ? item.variant?.id === variantId : !item.variant)
+          ? { ...item, quantity }
+          : item
       ))
     }
   }
 
   const calculateTotal = () => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
+    const subtotal = cart.reduce((sum, item) => sum + (item.itemPrice * item.quantity), 0)
     const tax = subtotal * (tenantTaxRate / 100)
     return { subtotal, tax, total: subtotal + tax }
   }
@@ -214,6 +263,7 @@ export default function POSPage() {
       const token = localStorage.getItem('pos_token')
       const items = cart.map(item => ({
         productId: item.product.id,
+        variantId: item.variant?.id ?? null,
         quantity: item.quantity,
         notes: item.notes
       }))
@@ -417,6 +467,7 @@ export default function POSPage() {
                 >
                   {filteredProducts.map((product, idx) => {
                     const isOutOfStock = (product.stockQuantity ?? 0) <= 0
+                    const hasVariants = (product.productVariants?.length ?? 0) > 0
                     
                     return (
                     <motion.button
@@ -426,9 +477,16 @@ export default function POSPage() {
                       transition={{ delay: idx * 0.03 }}
                       whileHover={!isOutOfStock ? { y: -8, scale: 1.02 } : {}}
                       whileTap={!isOutOfStock ? { scale: 0.98 } : {}}
-                      onClick={() => addToCart(product)}
+                      onClick={() => {
+                        if (hasVariants) {
+                          setVariantModalProduct(product)
+                          setVariantModalQuantity(1)
+                        } else {
+                          addToCart(product)
+                        }
+                      }}
                       disabled={isOutOfStock}
-                      className={`bg-gradient-to-br from-white to-slate-50 rounded-xl md:rounded-2xl p-3 md:p-4 transition-all duration-200 text-left group border border-slate-200/50 ${
+                      className={`relative bg-gradient-to-br from-white to-slate-50 rounded-xl md:rounded-2xl p-3 md:p-4 transition-all duration-200 text-left group border border-slate-200/50 ${
                         isOutOfStock 
                           ? 'opacity-50 cursor-not-allowed' 
                           : 'hover:shadow-xl hover:border-emerald-300/50'
@@ -437,6 +495,11 @@ export default function POSPage() {
                       {isOutOfStock && (
                         <div className="absolute inset-0 bg-red-500/10 rounded-xl md:rounded-2xl flex items-center justify-center">
                           <span className="text-sm font-semibold text-red-700">Out of Stock</span>
+                        </div>
+                      )}
+                      {hasVariants && (
+                        <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-lg">
+                          {product.productVariants?.length} sizes
                         </div>
                       )}
                       <div className="relative mb-2 md:mb-3 overflow-hidden rounded-lg md:rounded-xl bg-slate-100">
@@ -460,24 +523,56 @@ export default function POSPage() {
                         {product.name}
                       </h3>
                       <div className="flex items-end justify-between gap-2">
-                        <motion.p
-                          whileHover={!isOutOfStock ? { scale: 1.05 } : {}}
-                          className={`text-base md:text-lg font-bold ${
-                            isOutOfStock
-                              ? 'text-gray-400'
-                              : 'bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent'
-                          }`}
-                        >
-                          ₱{product.price.toFixed(2)}
-                        </motion.p>
+                        <div className="flex-1">
+                          {/* Show variant selector if variants exist, otherwise show base price */}
+                          {(product.productVariants?.length ?? 0) > 0 ? (
+                            <div className="flex flex-col gap-2">
+                              <select
+                                onChange={(e) => {
+                                  const variantId = parseInt(e.target.value)
+                                  const selectedVariant = product.productVariants?.find(v => v.id === variantId)
+                                  if (selectedVariant) {
+                                    addToCart(product, selectedVariant)
+                                  }
+                                }}
+                                defaultValue=""
+                                className="w-full px-3 py-2 text-sm bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-900 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                              >
+                                <option value="" disabled>Select size...</option>
+                                {product.productVariants?.map(v => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.name} - ₱{v.price.toFixed(2)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : product.price > 0 ? (
+                            <motion.p
+                              whileHover={!isOutOfStock ? { scale: 1.05 } : {}}
+                              className={`text-base md:text-lg font-bold ${
+                                isOutOfStock
+                                  ? 'text-gray-400'
+                                  : 'bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent'
+                              }`}
+                            >
+                              ₱{product.price.toFixed(2)}
+                            </motion.p>
+                          ) : (
+                            <p className="text-sm text-amber-600 font-medium">
+                              Price not set
+                            </p>
+                          )}
+                        </div>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg whitespace-nowrap ${
-                          (product.stockQuantity ?? 0) > 5
+                          (product.productVariants?.length ?? 0) > 0
+                            ? 'bg-blue-100 text-blue-700'
+                            : (product.stockQuantity ?? 0) > 5
                             ? 'bg-emerald-100 text-emerald-700'
                             : (product.stockQuantity ?? 0) > 0
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                          {product.stockQuantity ?? 0} stock
+                          {(product.productVariants?.length ?? 0) > 0 ? `${product.productVariants?.length} sizes` : `${product.stockQuantity ?? 0} stock`}
                         </span>
                       </div>
                     </motion.button>
@@ -529,7 +624,7 @@ export default function POSPage() {
               ) : (
                 cart.map((item, idx) => (
                   <motion.div
-                    key={item.product.id}
+                    key={`${item.product.id}-${item.variant?.id ?? 'base'}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
@@ -537,13 +632,20 @@ export default function POSPage() {
                     className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl md:rounded-2xl p-3 md:p-4 mb-3 md:mb-4 border border-slate-200/50 hover:border-emerald-300/50 transition-colors group"
                   >
                     <div className="flex justify-between items-start gap-2 md:gap-3 mb-2 md:mb-3">
-                      <h3 className="font-semibold text-slate-900 text-sm md:text-base line-clamp-1 flex-1">
-                        {item.product.name}
-                      </h3>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-slate-900 text-sm md:text-base line-clamp-1">
+                          {item.product.name}
+                        </h3>
+                        {item.variant && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Size: {item.variant.name}
+                          </p>
+                        )}
+                      </div>
                       <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => removeFromCart(item.product.id)}
+                        onClick={() => removeFromCart(item.product.id, item.variant?.id)}
                         className="text-slate-400 hover:text-red-500 flex-shrink-0 p-1"
                       >
                         <XMarkIcon className="w-4 h-4 md:w-5 md:h-5" />
@@ -555,7 +657,7 @@ export default function POSPage() {
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity - 1)}
                           className="w-6 h-6 md:w-7 md:h-7 rounded text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center text-sm font-bold transition-colors"
                         >
                           −
@@ -566,7 +668,7 @@ export default function POSPage() {
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity + 1)}
                           className="w-6 h-6 md:w-7 md:h-7 rounded text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center text-sm font-bold transition-colors"
                         >
                           +
@@ -574,10 +676,10 @@ export default function POSPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs md:text-sm text-slate-500">
-                          ₱{item.product.price.toFixed(2)} each
+                          ₱{item.itemPrice.toFixed(2)} each
                         </p>
                         <p className="font-bold text-emerald-600 text-sm md:text-base">
-                          ₱{(item.product.price * item.quantity).toFixed(2)}
+                          ₱{(item.itemPrice * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -690,6 +792,136 @@ export default function POSPage() {
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* Variant Selection Modal */}
+        <AnimatePresence>
+          {variantModalProduct && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setVariantModalProduct(null)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">
+                        Select Size
+                      </h3>
+                      <p className="text-sm text-blue-100 mt-1">
+                        {variantModalProduct.name}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setVariantModalProduct(null)}
+                      className="text-white hover:text-blue-100 transition-colors"
+                    >
+                      <XMarkIcon className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Variants List */}
+                <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
+                  {variantModalProduct.productVariants?.map((variant) => {
+                    console.log('Variant in modal:', variant);
+                    return (
+                    <motion.div
+                      key={variant.id}
+                      className="p-4 border-2 border-slate-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {variant.name}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {variant.isActive ? 'Available' : 'Out of Stock'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-blue-600">
+                            ₱{variant.price.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          // Add to cart with correct quantity
+                          for (let i = 0; i < variantModalQuantity; i++) {
+                            addToCart(variantModalProduct, variant)
+                          }
+                          setVariantModalProduct(null)
+                          setVariantModalQuantity(1)
+                        }}
+                        disabled={!variant.isActive}
+                        className="w-full py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-sm"
+                      >
+                        Add to Cart
+                      </motion.button>
+                    </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Quantity Selector */}
+                <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3">
+                    Quantity
+                  </label>
+                  <div className="flex items-center space-x-4">
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() =>
+                        setVariantModalQuantity(Math.max(1, variantModalQuantity - 1))
+                      }
+                      className="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                    >
+                      −
+                    </motion.button>
+                    <span className="text-xl font-bold text-slate-900 w-12 text-center">
+                      {variantModalQuantity}
+                    </span>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() =>
+                        setVariantModalQuantity(variantModalQuantity + 1)
+                      }
+                      className="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                    >
+                      +
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="border-t border-slate-200 px-6 py-4 flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setVariantModalProduct(null)}
+                    className="flex-1 py-2 px-4 border-2 border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   )

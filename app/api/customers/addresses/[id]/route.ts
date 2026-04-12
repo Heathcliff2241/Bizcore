@@ -24,16 +24,23 @@ export async function PATCH(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
     const body = await request.json()
 
-    const customer = await prisma.customer.findFirst({
-      where: { email: session.user.email }
-    })
+    let customer
+    if (session.user.id) {
+      customer = await prisma.customer.findUnique({
+        where: { id: parseInt(session.user.id) }
+      })
+    } else {
+      customer = await prisma.customer.findFirst({
+        where: { email: session.user.email }
+      })
+    }
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
@@ -68,15 +75,22 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
 
-    const customer = await prisma.customer.findFirst({
-      where: { email: session.user.email }
-    })
+    let customer
+    if (session.user.id) {
+      customer = await prisma.customer.findUnique({
+        where: { id: parseInt(session.user.id) }
+      })
+    } else {
+      customer = await prisma.customer.findFirst({
+        where: { email: session.user.email }
+      })
+    }
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })

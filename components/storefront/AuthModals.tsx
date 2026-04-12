@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
@@ -20,7 +20,7 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
   const [mounted, setMounted] = useState(false)
   const subdomain = storefront?.subdomain || ''
 
-  // Debug log when modal opens
+  // Debug log when modal opens and reset state when it closes
   useEffect(() => {
     if (isOpen) {
       console.log('[LOGIN MODAL] Opened with storefront:', { 
@@ -28,6 +28,12 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
         storefrontName: storefront?.name,
         hasStorefront: !!storefront 
       })
+    } else {
+      // Reset form state when modal closes
+      setLoading(false)
+      setError(null)
+      setEmail('')
+      setPassword('')
     }
   }, [isOpen, storefront])
 
@@ -57,25 +63,39 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
     }
 
     try {
+      // Use NextAuth customer-credentials provider (same as LoginForm)
       const result = await signIn('customer-credentials', {
         email,
         password,
         subdomain,
-        redirect: false
+        redirect: false,
+        callbackUrl: `/storefront/${subdomain}/account`,
       })
 
-      console.log('[LOGIN MODAL] SignIn result:', result)
+      console.log('[LOGIN MODAL] Login result:', { ok: result?.ok, error: result?.error })
 
-      if (result?.error) {
-        setError(result.error || 'Sign in failed')
+      if (!result?.ok) {
+        setError(result?.error || 'Login failed')
+        setLoading(false)
         return
       }
 
+      console.log('[LOGIN MODAL] Login successful, closing modal')
+      
+      // Reset form state
+      setLoading(false)
+      setEmail('')
+      setPassword('')
+      setError(null)
+      
+      // Close modal
+      onClose()
+      
+      // Force page reload to update session throughout the app
       window.location.reload()
     } catch (err) {
       console.error('[LOGIN MODAL] Error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
       setLoading(false)
     }
   }
@@ -100,13 +120,13 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, type: 'spring', bounce: 0.2 }}
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 flex items-center justify-center z-50 p-3 sm:p-4"
           >
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 sm:p-8 max-h-[90vh] overflow-y-auto">
               {/* Close button */}
               <button
                 onClick={onClose}
@@ -123,22 +143,22 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
                 </svg>
               </button>
 
-              <h2 className="text-2xl font-bold mb-2">Sign In</h2>
-              <p className="text-gray-600 mb-6">Enter your credentials to access your account</p>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2">Sign In</h2>
+              <p className="text-sm sm:text-base text-gray-600 mb-6">Enter your credentials to access your account</p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600"
+                    className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-xs sm:text-sm text-red-600"
                   >
                     {error}
                   </motion.div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                     Email
                   </label>
                   <input
@@ -146,14 +166,14 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                     required
                     disabled={loading}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                     Password
                   </label>
                   <input
@@ -161,7 +181,7 @@ export const LoginModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront }
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                     required
                     disabled={loading}
                   />
@@ -225,6 +245,23 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = 'unset'
+      // Reset form state when modal closes
+      setLoading(false)
+      setError(null)
+      setSuccess(false)
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        street: '',
+        city: '',
+        state: '',
+        zip: '',
+        agreeToTerms: false
+      })
     }
     return () => {
       document.body.style.overflow = 'unset'
@@ -253,66 +290,79 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
     setError(null)
 
     try {
+      // Create the customer account via the signup endpoint
       const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          subdomain,
           email: formData.email,
           password: formData.password,
           firstName: formData.firstName,
           lastName: formData.lastName,
-          phone: formData.phone,
-          address: {
+          phone: formData.phone || undefined,
+          address: (formData.street || formData.city || formData.state || formData.zip) ? {
             street: formData.street,
             city: formData.city,
             state: formData.state,
             zip: formData.zip
-          },
-          subdomain,
-          agreeToTerms: formData.agreeToTerms
+          } : undefined
         })
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const data = await response.json()
         setError(data.error || 'Sign up failed')
         setLoading(false)
         return
       }
-
-      // Signup successful, now sign in the customer
-      // Add a small delay to ensure the database has committed the customer record
-      await new Promise(resolve => setTimeout(resolve, 500))
       
-      const signInResult = await signIn('customer-credentials', {
+      // Account created successfully - now sign in using NextAuth
+      console.log('[SIGNUP MODAL] Account created, signing in with NextAuth')
+      
+      const result = await signIn('customer-credentials', {
         email: formData.email,
         password: formData.password,
         subdomain,
-        redirect: false
+        redirect: false,
+        callbackUrl: `/storefront/${subdomain}/account`,
       })
 
-      console.log('[SIGNUP] SignIn Result:', signInResult)
-
-      if (signInResult?.error) {
-        console.error('[SIGNUP] Sign in after signup failed:', signInResult.error)
-        setError('Account created, but sign in failed. Please sign in manually.')
+      if (!result?.ok) {
+        setError(result?.error || 'Sign in failed after signup')
         setLoading(false)
         return
       }
 
-      if (signInResult?.ok) {
-        setSuccess(true)
-        // Close modal and refresh after brief delay to let session update
-        setTimeout(() => {
-          onClose()
-          window.location.reload()
-        }, 500)
-        return
-      }
-
-      console.warn('[SIGNUP] Sign in returned no result:', signInResult)
-      setError('Account created, but sign in failed. Please sign in manually.')
-      setLoading(false)
+      console.log('[SIGNUP MODAL] Sign up and login successful')
+      setSuccess(true)
+      
+      // Close modal after brief success message display
+      setTimeout(() => {
+        // Reset form state
+        setLoading(false)
+        setFormData({
+          email: '',
+          password: '',
+          confirmPassword: '',
+          firstName: '',
+          lastName: '',
+          phone: '',
+          street: '',
+          city: '',
+          state: '',
+          zip: '',
+          agreeToTerms: false
+        })
+        setError(null)
+        
+        // Close modal
+        onClose()
+        
+        // Force page reload to update session throughout the app
+        window.location.reload()
+      }, 1000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setLoading(false)
@@ -345,11 +395,11 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
             transition={{ duration: 0.2, type: 'spring', bounce: 0.2 }}
             className="fixed inset-0 flex items-center justify-center z-50 p-4 overflow-y-auto"
           >
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 my-auto">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 sm:p-8 max-h-[90vh] overflow-y-auto">
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-6 right-6 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="absolute top-4 sm:top-6 right-4 sm:right-6 p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors"
                 aria-label="Close modal"
               >
                 <svg
@@ -362,15 +412,15 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
                 </svg>
               </button>
 
-              <h2 className="text-2xl font-bold mb-2">Create Account</h2>
-              <p className="text-gray-600 mb-6">Join us to get started</p>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2">Create Account</h2>
+              <p className="text-sm sm:text-base text-gray-600 mb-6">Join us to get started</p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600"
+                    className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-xs sm:text-sm text-red-600"
                   >
                     {error}
                   </motion.div>
@@ -380,15 +430,15 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm text-green-600"
+                    className="p-3 sm:p-4 bg-green-50 border border-green-200 rounded-xl text-xs sm:text-sm text-green-600"
                   >
                     ✓ Account created successfully! Signing you in...
                   </motion.div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                       First name
                     </label>
                     <input
@@ -396,13 +446,13 @@ export const SignupModal: React.FC<ModalProps> = ({ isOpen, onClose, storefront 
                       value={formData.firstName}
                       onChange={(e) => handleChange('firstName', e.target.value)}
                       placeholder="John"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                      className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                       required
                       disabled={loading}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                       Last name
                     </label>
                     <input

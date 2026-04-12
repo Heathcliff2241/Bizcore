@@ -3,40 +3,6 @@ import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const PLAN_PRICING = {
-  trial: { amount: 0, cycle: "trial", name: "Trial" },
-  basic: { amount: 199900, cycle: "monthly", name: "BizCore Starter" },
-  premium: { amount: 1999900, cycle: "annual", name: "BizCore Premium" },
-  enterprise: { amount: 0, cycle: "custom", name: "Enterprise" },
-};
-
-const PLAN_FEATURES = {
-  trial: {
-    orders: 10,
-    employees: 1,
-    storage: 1,
-    apiCalls: 100,
-  },
-  basic: {
-    orders: null, // unlimited
-    employees: 3,
-    storage: 10,
-    apiCalls: 1000,
-  },
-  premium: {
-    orders: null, // unlimited
-    employees: null, // unlimited
-    storage: 100,
-    apiCalls: 100000,
-  },
-  enterprise: {
-    orders: null,
-    employees: null,
-    storage: null,
-    apiCalls: null,
-  },
-};
-
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -107,14 +73,48 @@ export async function GET() {
 
     // Use pending upgrade plan if it exists, otherwise use current plan
     const planIdToShow = subscription.pendingUpgradePlanId || subscription.planId;
-    const pricing = PLAN_PRICING[planIdToShow as keyof typeof PLAN_PRICING] || PLAN_PRICING.trial;
-    const features = PLAN_FEATURES[planIdToShow as keyof typeof PLAN_FEATURES] || PLAN_FEATURES.trial;
+    
+    // CRITICAL: Fetch plan data from database instead of hardcoded values
+    const planData = await prisma.plan.findUnique({
+      where: { id: planIdToShow },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        billingCycle: true,
+        features: true,
+      },
+    });
+
+    if (!planData) {
+      return NextResponse.json(
+        { error: `Plan not found: ${planIdToShow}` },
+        { status: 404 }
+      );
+    }
+
+    // CRITICAL: Fetch ALL active plans so client can calculate proration
+    const allPlans = await prisma.plan.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        billingCycle: true,
+        features: true,
+        displayOrder: true,
+      },
+      orderBy: { displayOrder: 'asc' },
+    });
 
     return NextResponse.json({
       subscription: {
         id: subscription.id,
         tenantId: subscription.tenantId,
         planId: subscription.planId,
+        pendingUpgradePlanId: subscription.pendingUpgradePlanId,
         status: subscription.status,
         billingCycle: subscription.billingCycle,
         currentPeriodStart: subscription.currentPeriodStart,
@@ -126,11 +126,14 @@ export async function GET() {
         daysRemaining,
       },
       plan: {
-        name: pricing.name,
-        price: pricing.amount,
-        cycle: pricing.cycle,
-        features,
+        id: planData.id,
+        name: planData.name,
+        description: planData.description,
+        price: planData.price,
+        cycle: planData.billingCycle,
+        features: planData.features,
       },
+      allPlans,
       tenant: {
         name: tenant.name,
         email: user.email,

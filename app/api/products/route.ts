@@ -118,15 +118,16 @@ export async function POST(request: NextRequest) {
       fullBody: body
     })
 
-    if (!name || price === undefined || price === null) {
-      return NextResponse.json({ success: false, message: 'Name and price are required' }, { status: 400 })
+    if (!name) {
+      return NextResponse.json({ success: false, message: 'Product name is required' }, { status: 400 })
     }
 
-    const parsedPrice = Number(price)
+    // Price is optional if variants are used, defaults to 0
+    const parsedPrice = Number(price ?? 0)
     const parsedCost = Number(cost_price ?? 0)
 
-    if (!Number.isFinite(parsedPrice)) {
-      return NextResponse.json({ success: false, message: 'Price must be a valid number' }, { status: 400 })
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return NextResponse.json({ success: false, message: 'Price must be a valid non-negative number' }, { status: 400 })
     }
 
     const parsedCategoryId = category_id !== undefined && category_id !== null && category_id !== '' ? Number(category_id) : null

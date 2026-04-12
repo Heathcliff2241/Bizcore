@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// SUBSYSTEM 6: STOREFRONT & PAGE DESIGN (includes dependencies from Subsystem 1)
+// ============================================================================
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  createdAt DateTime  @default(now())
+
+  pages                 Page[]
+  pageRevisions         PageRevision[]
+  pageDesignRevisions   PageDesignRevision[]
+  projects              Project[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id        Int       @id @default(autoincrement())
+  name      String
+  subdomain String    @unique
+  createdAt DateTime  @default(now())
+
+  pages             Page[]
+  pageDesigns       PageDesign[]
+  storefrontSettings StorefrontSettings?
+
+  @@map("tenants")
+}
+
+model Page {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int
+  userId    Int
+  title     String
+  slug      String
+  content   Json?
+  isPublished Boolean @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revisions PageRevision[]
+
+  @@unique([tenantId, slug])
+  @@map("pages")
+}
+
+model PageRevision {
+  id        Int       @id @default(autoincrement())
+  pageId    Int
+  userId    Int
+  content   Json?
+  createdAt DateTime  @default(now())
+
+  page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("page_revisions")
+}
+
+model PageDesign {
+  id              Int                  @id @default(autoincrement())
+  tenantId        Int
+  slug            String
+  title           String
+  content         Json?
+  publishedContent Json?
+  template        String?
+  isPublished     Boolean              @default(false)
+  isDraft         Boolean              @default(true)
+  publishedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @default(now())
+
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  components      PageComponent[]
+  revisions       PageDesignRevision[]
+  seoSettings     SeoSettings?
+
+  @@unique([tenantId, slug])
+  @@map("page_designs")
+}
+
+model PageComponent {
+  id              Int         @id @default(autoincrement())
+  pageDesignId    Int
+  componentType   String
+  props           Json?
+  position        Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now())
+
+  pageDesign      PageDesign  @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+
+  @@map("page_components")
+}
+
+model PageDesignRevision {
+  id              Int         @id @default(autoincrement())
+  pageDesignId    Int
+  createdById     Int
+  content         Json?
+  revisionNumber  Int
+  changeDescription String?
+  createdAt       DateTime    @default(now())
+
+  pageDesign      PageDesign  @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+  createdBy       User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@map("page_design_revisions")
+}
+
+model SeoSettings {
+  id              Int         @id @default(autoincrement())
+  pageDesignId    Int         @unique
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+  ogImage         String?
+  twitterCard     String?
+  canonicalUrl    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now())
+
+  pageDesign      PageDesign  @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+
+  @@map("seo_settings")
+}
+
+model StorefrontSettings {
+  id              Int       @id @default(autoincrement())
+  tenantId        Int       @unique
+  colorScheme     Json?
+  typography      Json?
+  brandAssets     Json?
+  seoDefaults     Json?
+  socialLinks     Json?
+  paymentMethods  Json?
+  shippingSettings Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("storefront_settings")
+}
+
+model Project {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tenantId  Int
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canvases  Canvas[]
+
+  @@map("projects")
+}
+
+model Canvas {
+  id        Int       @id @default(autoincrement())
+  projectId Int
+  data      Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("canvases")
+}

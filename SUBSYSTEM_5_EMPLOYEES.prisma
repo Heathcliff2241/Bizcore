@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMERATIONS
+// ============================================================================
+
+enum EmployeeRole {
+  cashier
+  manager
+  admin
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  preparing
+  ready
+  completed
+  cancelled
+}
+
+// ============================================================================
+// SUBSYSTEM 5: EMPLOYEES & POS (includes dependencies from Subsystems 1 & 3)
+// ============================================================================
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  createdAt DateTime  @default(now())
+
+  employees Employee[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id        Int       @id @default(autoincrement())
+  name      String
+  subdomain String    @unique
+  createdAt DateTime  @default(now())
+
+  employees   Employee[]
+  orders      Order[]
+  posSessions POSSession[]
+
+  @@map("tenants")
+}
+
+model Order {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int
+  employeeId Int?
+  createdAt DateTime  @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@map("orders")
+}
+
+model Employee {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  userId      Int?
+  firstName   String
+  lastName    String
+  email       String
+  password    String?
+  pin         String?
+  role        EmployeeRole @default(cashier)
+  permissions Json?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orders      Order[]
+  posSessions POSSession[]
+
+  @@unique([tenantId, email])
+  @@map("employees")
+}
+
+model POSSession {
+  id              Int       @id @default(autoincrement())
+  employeeId      Int
+  tenantId        Int
+  startTime       DateTime
+  endTime         DateTime?
+  openingCash     Float
+  closingCash     Float?
+  expectedCash    Float?
+  cashDifference  Float?
+  totalSales      Float     @default(0)
+  totalOrders     Int       @default(0)
+  notes           String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("pos_sessions")
+}

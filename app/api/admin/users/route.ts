@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
           role: true,
           isActive: true,
           createdAt: true,
+          lastLogin: true,
         },
         orderBy: { createdAt: 'desc' },
       }) : [],
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
           lastName: true,
           isActive: true,
           createdAt: true,
+          lastLogin: true,
           tenant: {
             select: {
               id: true,
@@ -98,6 +100,7 @@ export async function GET(request: NextRequest) {
           lastName: true,
           isActive: true,
           createdAt: true,
+          lastLogin: true,
           tenant: {
             select: {
               id: true,
@@ -138,6 +141,7 @@ export async function GET(request: NextRequest) {
       role: 'customer' as const,
       isActive: c.isActive,
       createdAt: c.createdAt,
+      lastLogin: c.lastLogin,
       tenant: c.tenant,
     }))
 
@@ -150,6 +154,7 @@ export async function GET(request: NextRequest) {
       role: 'employee' as const,
       isActive: e.isActive,
       createdAt: e.createdAt,
+      lastLogin: e.lastLogin,
       tenant: e.tenant,
     }))
 

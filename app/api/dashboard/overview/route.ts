@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
       productsCount,
       customersCount,
       ingredientRecords,
+      productLowStockRecords,
       revenueAggregate,
       todayRevenueAggregate,
       pendingOrdersCount,
@@ -123,13 +124,17 @@ export async function GET(request: NextRequest) {
         where: { tenantId },
         select: { currentStock: true, minStock: true, name: true, unit: true }
       }),
-      prisma.order.aggregate({
-        _sum: { total: true },
-        where: { tenantId }
+      prisma.product.findMany({
+        where: { tenantId, trackInventory: true },
+        select: { currentStock: true, lowStockThreshold: true, name: true }
       }),
       prisma.order.aggregate({
         _sum: { total: true },
-        where: { tenantId, createdAt: { gte: todayStart } }
+        where: { tenantId, paymentStatus: 'paid', status: { in: ['completed', 'delivered'] } }
+      }),
+      prisma.order.aggregate({
+        _sum: { total: true },
+        where: { tenantId, createdAt: { gte: todayStart }, paymentStatus: 'paid', status: { in: ['completed', 'delivered'] } }
       }),
       prisma.order.count({
         where: { tenantId, status: 'pending' }
@@ -186,6 +191,7 @@ export async function GET(request: NextRequest) {
       number,
       number,
       IngredientSummary[],
+      Array<{ currentStock: number | null; lowStockThreshold: number | null; name: string }>,
       RevenueAggregate,
       RevenueAggregate,
       number,
@@ -235,7 +241,9 @@ export async function GET(request: NextRequest) {
     }
 
   const totalInventoryQuantity = ingredientRecords.reduce<number>((total, ingredient) => total + Number(ingredient.currentStock ?? 0), 0)
-    const lowStockCount = ingredientRecords.filter((ingredient) => {
+    
+    // Count low stock ingredients
+    const lowStockIngredients = ingredientRecords.filter((ingredient) => {
       if (ingredient.minStock === null || ingredient.minStock === undefined) {
         return false
       }
@@ -243,6 +251,19 @@ export async function GET(request: NextRequest) {
       const minimum = Number(ingredient.minStock ?? 0)
       return Number.isFinite(current) && Number.isFinite(minimum) && current <= minimum
     }).length
+
+    // Count low stock products
+    const lowStockProducts = productLowStockRecords.filter((product) => {
+      if (product.lowStockThreshold === null || product.lowStockThreshold === undefined) {
+        return false
+      }
+      const current = Number(product.currentStock ?? 0)
+      const threshold = Number(product.lowStockThreshold ?? 0)
+      return Number.isFinite(current) && Number.isFinite(threshold) && current <= threshold
+    }).length
+
+    // Total low stock count (ingredients + products)
+    const lowStockCount = lowStockIngredients + lowStockProducts
 
     const recentOrders = recentOrdersRaw.map((order) => ({
       id: order.id,

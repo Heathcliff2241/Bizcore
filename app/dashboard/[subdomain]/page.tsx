@@ -16,6 +16,8 @@ import {
 } from 'chart.js'
 
 import { useTheme } from '../theme-context'
+import { TodayStatsWidget } from '@/components/dashboard/TodayStatsWidget'
+import { RecentItemsWidget } from '@/components/dashboard/RecentItemsWidget'
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Filler, Tooltip, Legend)
 
@@ -215,27 +217,27 @@ const SummaryTile = ({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="p-6 border rounded-2xl shadow-xl"
+      className="p-4 sm:p-6 border rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl"
       style={{
         background: `linear-gradient(135deg, ${theme.primary}12, ${theme.secondary}08)`,
         borderColor: `${theme.primary}20`
       }}
     >
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium" style={{ color: theme.text ?? '#6b7280' }}>
+      <div className="flex items-center justify-between flex-wrap gap-1 sm:gap-0">
+        <p className="text-xs sm:text-sm font-medium" style={{ color: theme.text ?? '#6b7280' }}>
           {title}
         </p>
         {subtitle && (
-          <p className="text-xs uppercase tracking-wider" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
+          <p className="text-[10px] sm:text-xs uppercase tracking-wider" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
             {subtitle}
           </p>
         )}
       </div>
-      <p className="mt-3 text-3xl font-bold" style={{ color: theme.text ?? '#111827' }}>
+      <p className="mt-2 sm:mt-3 text-2xl sm:text-3xl font-bold" style={{ color: theme.text ?? '#111827' }}>
         {value}
       </p>
       {trendData && trendData.length > 0 && (
-        <div className="mt-4 h-16">
+        <div className="mt-3 sm:mt-4 h-12 sm:h-16">
           <Line data={chartData} options={chartOptions} />
         </div>
       )}
@@ -275,37 +277,37 @@ const InventoryHealthCard = ({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="p-6 border rounded-2xl shadow-xl"
+      className="p-4 sm:p-6 border rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl"
       style={{
         background: `linear-gradient(135deg, ${theme.primary}10, ${theme.secondary}10)`,
         borderColor: `${theme.primary}20`
       }}
     >
-      <div className="flex items-baseline justify-between">
-        <p className="text-sm font-semibold" style={{ color: theme.text ?? '#6b7280' }}>
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <p className="text-xs sm:text-sm font-semibold" style={{ color: theme.text ?? '#6b7280' }}>
           Inventory Coverage
         </p>
         {hasWorstData && (
-          <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ background: `${theme.primary}14`, color: theme.text ?? '#0f172a' }}>
+          <span className="px-2 py-1 text-[10px] sm:text-xs font-medium rounded-full" style={{ background: `${theme.primary}14`, color: theme.text ?? '#0f172a' }}>
             {worstStatus}
           </span>
         )}
       </div>
-      <p className="mt-1 text-4xl font-bold" style={{ color: theme.text ?? '#111827' }}>
+      <p className="mt-1 text-3xl sm:text-4xl font-bold" style={{ color: theme.text ?? '#111827' }}>
         {coverageHeadline}
       </p>
-      <p className="text-xs tracking-wide" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
+      <p className="text-[10px] sm:text-xs tracking-wide" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
         {coverageDetail}
       </p>
-      <div className="mt-4 space-y-1 text-sm" style={{ color: theme.text ?? '#374151' }}>
+      <div className="mt-3 sm:mt-4 space-y-1 text-xs sm:text-sm" style={{ color: theme.text ?? '#374151' }}>
         <p>
           Understock items: <span className="font-semibold">{health.understockCount}</span>
         </p>
         <div>
           <p>
-            Closest to minimum: <span className="font-semibold">{worstIngredientLabel}</span>
+            Closest to minimum: <span className="font-semibold break-words">{worstIngredientLabel}</span>
           </p>
-          <p className="text-xs" style={{ color: theme.text ? `${theme.text}80` : '#6b7280' }}>
+          <p className="text-[10px] sm:text-xs" style={{ color: theme.text ? `${theme.text}80` : '#6b7280' }}>
             {worstInfoLine}
           </p>
         </div>
@@ -319,23 +321,23 @@ const OrdersTable = ({ data, theme }: { data: Order[]; theme: ThemeColors }) => 
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.6 }}
-    className="p-6 border rounded-2xl shadow-xl"
+    className="p-4 sm:p-6 border rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl"
     style={{
       background: theme.surface ?? '#ffffff',
       borderColor: `${theme.primary}15`
     }}
   >
-    <h3 className="mb-4 text-lg font-semibold" style={{ color: theme.text ?? '#111827' }}>
+    <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold" style={{ color: theme.text ?? '#111827' }}>
       Recent Orders
     </h3>
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm text-left" style={{ color: theme.text ?? '#374151' }}>
+    <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+      <table className="min-w-full text-xs sm:text-sm text-left" style={{ color: theme.text ?? '#374151' }}>
         <thead>
           <tr className="border-b" style={{ borderColor: `${theme.primary}15` }}>
-            <th className="py-3 font-medium">Order ID</th>
-            <th className="py-3 font-medium">Customer</th>
-            <th className="py-3 font-medium">Status</th>
-            <th className="py-3 font-medium">Total</th>
+            <th className="py-2 sm:py-3 font-medium pr-2 sm:pr-4">Order ID</th>
+            <th className="py-2 sm:py-3 font-medium pr-2 sm:pr-4">Customer</th>
+            <th className="py-2 sm:py-3 font-medium pr-2 sm:pr-4">Status</th>
+            <th className="py-2 sm:py-3 font-medium">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -348,10 +350,10 @@ const OrdersTable = ({ data, theme }: { data: Order[]; theme: ThemeColors }) => 
               className="border-b"
               style={{ borderColor: `${theme.primary}10` }}
             >
-              <td className="py-3">{order.order_number}</td>
-              <td className="py-3">{order.customer_name}</td>
-              <td className="py-3 capitalize">{order.order_status}</td>
-              <td className="py-3">{formatCurrency(order.total_amount)}</td>
+              <td className="py-2 sm:py-3 pr-2 sm:pr-4 break-words">{order.order_number}</td>
+              <td className="py-2 sm:py-3 pr-2 sm:pr-4 break-words">{order.customer_name}</td>
+              <td className="py-2 sm:py-3 pr-2 sm:pr-4 capitalize">{order.order_status}</td>
+              <td className="py-2 sm:py-3 whitespace-nowrap">{formatCurrency(order.total_amount)}</td>
             </motion.tr>
           ))}
         </tbody>
@@ -365,22 +367,22 @@ const ProductsTable = ({ data, theme }: { data: Product[]; theme: ThemeColors })
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.6, delay: 0.2 }}
-    className="p-6 border rounded-2xl shadow-xl"
+    className="p-4 sm:p-6 border rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl"
     style={{
       background: theme.surface ?? '#ffffff',
       borderColor: `${theme.secondary}10`
     }}
   >
-    <h3 className="mb-4 text-lg font-semibold" style={{ color: theme.text ?? '#111827' }}>
+    <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold" style={{ color: theme.text ?? '#111827' }}>
       Recent Products
     </h3>
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm text-left" style={{ color: theme.text ?? '#374151' }}>
+    <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+      <table className="min-w-full text-xs sm:text-sm text-left" style={{ color: theme.text ?? '#374151' }}>
         <thead>
           <tr className="border-b" style={{ borderColor: `${theme.secondary}15` }}>
-            <th className="py-3 font-medium">Product</th>
-            <th className="py-3 font-medium">Stock</th>
-            <th className="py-3 font-medium">Price</th>
+            <th className="py-2 sm:py-3 font-medium pr-2 sm:pr-4">Product</th>
+            <th className="py-2 sm:py-3 font-medium pr-2 sm:pr-4">Stock</th>
+            <th className="py-2 sm:py-3 font-medium">Price</th>
           </tr>
         </thead>
         <tbody>
@@ -393,9 +395,9 @@ const ProductsTable = ({ data, theme }: { data: Product[]; theme: ThemeColors })
               className="border-b"
               style={{ borderColor: `${theme.secondary}10` }}
             >
-              <td className="py-3">{product.name}</td>
-              <td className="py-3">{product.current_stock}</td>
-              <td className="py-3">{formatCurrency(product.price)}</td>
+              <td className="py-2 sm:py-3 pr-2 sm:pr-4 break-words">{product.name}</td>
+              <td className="py-2 sm:py-3 pr-2 sm:pr-4">{product.current_stock}</td>
+              <td className="py-2 sm:py-3 whitespace-nowrap">{formatCurrency(product.price)}</td>
             </motion.tr>
           ))}
         </tbody>
@@ -570,15 +572,15 @@ export default function TenantDashboardPage() {
   // Show error state if loading failed
   if (error && !tenantInfo) {
     return (
-      <main className="flex items-center justify-center min-h-screen" style={{ backgroundColor: theme.background ?? '#f3f4f6' }}>
+      <main className="flex items-center justify-center min-h-screen p-4 sm:p-6" style={{ backgroundColor: theme.background ?? '#f3f4f6' }}>
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="p-6 border border-red-100 rounded-2xl shadow-sm bg-white"
+          className="p-4 sm:p-6 border border-red-100 rounded-xl sm:rounded-2xl shadow-sm bg-white max-w-md w-full"
         >
-          <h2 className="text-xl font-semibold text-red-600">Unable to load dashboard</h2>
-          <p className="mt-2 text-sm text-gray-600">{error}</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-red-600">Unable to load dashboard</h2>
+          <p className="mt-2 text-xs sm:text-sm text-gray-600 break-words">{error}</p>
         </motion.div>
       </main>
     )
@@ -590,61 +592,61 @@ export default function TenantDashboardPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="flex-1 p-8"
+      className="flex-1 p-4 sm:p-6 md:p-8"
       style={{ backgroundColor: theme.background ?? '#f9fafb' }}
     >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col gap-2 mb-6"
+        className="flex flex-col gap-2 mb-4 sm:mb-6"
       >
-        <div className={loading ? 'h-9 w-64 rounded-lg bg-gray-200 animate-pulse' : ''}>
+        <div className={loading ? 'h-7 sm:h-9 w-48 sm:w-64 rounded-lg bg-gray-200 animate-pulse' : ''}>
           {!loading && (
-            <h2 className="text-3xl font-semibold" style={{ color: theme.text ?? '#111827' }}>
+            <h2 className="text-2xl sm:text-3xl font-semibold" style={{ color: theme.text ?? '#111827' }}>
               {tenantInfo ? `Welcome back, ${tenantInfo.name}` : 'Dashboard Overview'}
             </h2>
           )}
         </div>
-        <div className={loading ? 'h-4 w-40 rounded bg-gray-200 animate-pulse' : ''}>
+        <div className={loading ? 'h-4 w-32 sm:w-40 rounded bg-gray-200 animate-pulse' : ''}>
           {!loading && (
-            <p className="text-sm" style={{ color: theme.text ? `${theme.text}80` : '#6b7280' }}>
+            <p className="text-xs sm:text-sm" style={{ color: theme.text ? `${theme.text}80` : '#6b7280' }}>
               Subdomain: {tenantInfo?.subdomain || 'Global'}
             </p>
           )}
         </div>
         {!loading && tenantInfo && (
-          <p className="text-sm text-[13px]" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
+          <p className="text-xs sm:text-sm text-[13px]" style={{ color: theme.text ? `${theme.text}70` : '#9ca3af' }}>
             Plan: {tenantInfo.subscriptionPlan ?? 'N/A'}  Customers: {summary.customers}
           </p>
         )}
       </motion.div>
 
-      {/* 🚨 CRITICAL: Low-Stock Alerts Banner */}
+      {/* 🚨 CRITICAL: Low-Stock Alerts Banner - Display at top */}
       {!loading && summary.lowStock > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-6 p-4 border-l-4 rounded-lg shadow-sm"
+          className="mb-4 sm:mb-6 p-3 sm:p-4 border-l-4 rounded-lg shadow-sm"
           style={{
             backgroundColor: '#fef2f2',
             borderColor: '#ef4444'
           }}
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2 sm:gap-3">
             <div
-              className="mt-1 text-lg font-bold flex-shrink-0"
+              className="mt-0.5 sm:mt-1 text-base sm:text-lg font-bold flex-shrink-0"
               style={{ color: '#dc2626' }}
             >
               ⚠️
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold" style={{ color: '#7f1d1d' }}>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm sm:text-base font-semibold" style={{ color: '#7f1d1d' }}>
                 Low Stock Alert
               </h3>
-              <p className="mt-1 text-sm" style={{ color: '#991b1b' }}>
-                {summary.lowStock} ingredient{summary.lowStock !== 1 ? 's are' : ' is'} running low on stock. 
+              <p className="mt-1 text-xs sm:text-sm" style={{ color: '#991b1b' }}>
+                {summary.lowStock} item{summary.lowStock !== 1 ? 's are' : ' is'} running low on stock (ingredients and products). 
                 Please check your inventory management dashboard to reorder.
               </p>
             </div>
@@ -652,11 +654,21 @@ export default function TenantDashboardPage() {
         </motion.div>
       )}
 
+      {/* Today's Activity Stats */}
+      {!loading && tenantInfo && (
+        <TodayStatsWidget subdomain={tenantInfo.subdomain} theme={theme} />
+      )}
+
+      {/* Recent Items Widget */}
+      {!loading && tenantInfo && (
+        <RecentItemsWidget subdomain={tenantInfo.subdomain} theme={theme} />
+      )}
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1, duration: 0.6 }}
-        className="grid grid-cols-1 gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8 sm:grid-cols-2 lg:grid-cols-4"
       >
         {loading ? (
           <>
@@ -678,8 +690,7 @@ export default function TenantDashboardPage() {
             <SummaryTile title="Customers" value={summary.customers} trendData={summary.customersTrend} theme={theme} />
             <SummaryTile
               title="Revenue"
-              value={formatCurrency(summary.todayRevenue)}
-              subtitle={`Month: ${formatCurrency(summary.revenue)}`}
+              value={formatCurrency(summary.revenue)}
               theme={theme}
             />
             <InventoryHealthCard health={summary.inventoryHealth} theme={theme} />
@@ -694,7 +705,7 @@ export default function TenantDashboardPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3, duration: 0.6 }}
-        className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+        className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2"
       >
         {loading ? (
           <>

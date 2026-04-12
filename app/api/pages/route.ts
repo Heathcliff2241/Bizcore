@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
 
     // Log the activity
     await logActivity({
-      userId: session.user.id,
+      userId: parseInt(session.user.id, 10),
       tenantId: parseInt(tenantId),
       action: 'PAGE_CREATED',
       details: {

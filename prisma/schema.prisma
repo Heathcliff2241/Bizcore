@@ -28,6 +28,7 @@ model User {
   emailVerificationOtp        String?
   emailVerificationOtpExpires DateTime?
   activityLogs                ActivityLog[]
+  notifications               Notification[]
   orderStatusHistories        OrderStatusHistory[]
   orders                      Order[]              @relation("OrderCustomer")
   pageDesignRevisions         PageDesignRevision[] @relation("PageDesignRevisionUser")
@@ -72,15 +73,21 @@ model Tenant {
   ingredients           Ingredient[]
   inventoryTransactions InventoryTransaction[]
   media                 Media[]
+  notifications         Notification[]
   orders                Order[]
   pageDesigns           PageDesign[]
   pages                 Page[]
+  upgradeRequests       PlanUpgradeRequest?    @relation("TenantUpgradeRequest")
   products              Product[]
   storefrontSettings    StorefrontSettings?
   subscription          Subscription?
   tenantUsers           TenantUser[]
   owner                 User                   @relation("TenantOwner", fields: [ownerId], references: [id])
 
+  @@index([isActive])
+  @@index([ownerId])
+  @@index([isPremium])
+  @@index([createdAt])
   @@map("tenants")
 }
 
@@ -118,6 +125,30 @@ model ActivityLog {
   @@map("activity_log")
 }
 
+model Notification {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  userId     Int?
+  type       String
+  title      String
+  message    String
+  actionUrl  String?
+  priority   String    @default("medium")
+  status     String    @default("unread")
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+  archivedAt DateTime?
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([tenantId, status])
+  @@map("notifications")
+}
+
 model Category {
   id          Int       @id @default(autoincrement())
   tenantId    Int
@@ -132,6 +163,8 @@ model Category {
   products    Product[]
 
   @@index([tenantId])
+  @@index([isActive])
+  @@index([tenantId, isActive])
   @@map("categories")
 }
 
@@ -171,18 +204,21 @@ model Ingredient {
   description           String?
   unit                  String                 @default("pieces")
   currentStock          Float                  @default(0)
-  reservedStock         Float                  @default(0)
   minStock              Float                  @default(0)
   costPerUnit           Float                  @default(0)
   supplier              String?
   isActive              Boolean                @default(true)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @default(now())
+  reservedStock         Float                  @default(0)
   tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryTransactions InventoryTransaction[]
   productIngredients    ProductIngredient[]
+  variantIngredients    VariantIngredient[]
 
   @@index([tenantId])
+  @@index([isActive])
+  @@index([tenantId, isActive])
   @@map("ingredients")
 }
 
@@ -232,13 +268,13 @@ model Order {
   tax                  Float                @default(0)
   discount             Float                @default(0)
   notes                String?
-  deliveryAddress      String?              @db.Text
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @default(now())
   employeeId           Int?
   paymentMethod        String?
   amountPaid           Float                @default(0)
   paymentStatus        PaymentStatus        @default(unpaid)
+  deliveryAddress      String?
   paymentProof         String?              @db.Text
   orderItems           OrderItem[]
   orderStatusHistories OrderStatusHistory[]
@@ -252,6 +288,8 @@ model Order {
   @@index([employeeId])
   @@index([status])
   @@index([paymentStatus])
+  @@index([createdAt])
+  @@index([tenantId, createdAt])
   @@map("orders")
 }
 
@@ -305,6 +343,8 @@ model Page {
   @@unique([tenantId, slug])
   @@index([tenantId])
   @@index([userId])
+  @@index([isPublished])
+  @@index([tenantId, isPublished])
   @@map("pages")
 }
 
@@ -322,31 +362,35 @@ model PageRevision {
 }
 
 model Product {
-  id                   Int                 @id @default(autoincrement())
-  tenantId             Int
-  categoryId           Int?
-  name                 String
-  description          String?
-  price                Float
-  cost                 Float               @default(0)
-  image                String?
-  isActive             Boolean             @default(true)
-  isFeatured           Boolean             @default(false)
-  sortOrder            Int                 @default(0)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @default(now())
-  slug                 String?
-  trackInventory       Boolean             @default(false)
-  currentStock         Float               @default(0)
-  lowStockThreshold    Float               @default(10)
-  orderItems           OrderItem[]
-  productIngredients   ProductIngredient[]
-  productVariants      ProductVariant[]
-  category             Category?           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                 Int                 @id @default(autoincrement())
+  tenantId           Int
+  categoryId         Int?
+  name               String
+  description        String?
+  price              Float
+  cost               Float               @default(0)
+  image              String?
+  isActive           Boolean             @default(true)
+  isFeatured         Boolean             @default(false)
+  sortOrder          Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @default(now())
+  slug               String?
+  currentStock       Float               @default(0)
+  lowStockThreshold  Float               @default(10)
+  trackInventory     Boolean             @default(false)
+  orderItems         OrderItem[]
+  productIngredients ProductIngredient[]
+  productVariants    ProductVariant[]
+  category           Category?           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([categoryId])
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([slug])
+  @@index([tenantId, isActive])
   @@map("products")
 }
 
@@ -363,18 +407,35 @@ model ProductIngredient {
 }
 
 model ProductVariant {
-  id         Int         @id @default(autoincrement())
-  productId  Int
-  name       String
-  price      Float
-  isActive   Boolean     @default(true)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @default(now())
-  orderItems OrderItem[]
-  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id                 Int                 @id @default(autoincrement())
+  productId          Int
+  name               String
+  price              Float
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @default(now())
+  orderItems         OrderItem[]
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantIngredients VariantIngredient[]
 
   @@index([productId])
   @@map("product_variants")
+}
+
+model VariantIngredient {
+  id           Int            @id @default(autoincrement())
+  variantId    Int
+  ingredientId Int
+  quantity     Float
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now())
+  ingredient   Ingredient     @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, ingredientId])
+  @@index([variantId])
+  @@index([ingredientId])
+  @@map("variant_ingredients")
 }
 
 model Project {
@@ -566,8 +627,8 @@ model AdminNotification {
   message     String
   actionUrl   String?
   isRead      Boolean  @default(false)
-  isDismissed Boolean  @default(false)
   createdAt   DateTime @default(now())
+  isDismissed Boolean  @default(false)
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -596,28 +657,29 @@ model Plan {
 }
 
 model Subscription {
-  id                   Int                @id @default(autoincrement())
-  tenantId             Int                @unique
+  id                   Int                 @id @default(autoincrement())
+  tenantId             Int                 @unique
   planId               String
-  status               SubscriptionStatus @default(trial)
-  billingCycle         BillingCycle       @default(trial)
+  status               SubscriptionStatus  @default(trial)
+  billingCycle         BillingCycle        @default(trial)
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
   renewalDate          DateTime?
   nextPaymentAmount    Int?
   nextPaymentDate      DateTime?
-  autoRenew            Boolean            @default(true)
+  autoRenew            Boolean             @default(true)
   previousPlanId       String?
   planChangedAt        DateTime?
-  unusedBalance        Int                @default(0)
+  unusedBalance        Int                 @default(0)
   pendingUpgradePlanId String?
   upgradePendingAt     DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @default(now())
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @default(now())
   invoices             Invoice[]
   payments             Payment[]
-  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plan                 Plan               @relation(fields: [planId], references: [id])
+  upgradeRequests      PlanUpgradeRequest? @relation("TenantUpgradeRequestSubscription")
+  plan                 Plan                @relation(fields: [planId], references: [id])
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   usageRecords         UsageRecord[]
 
   @@index([tenantId])
@@ -650,15 +712,16 @@ model Invoice {
   @@index([subscriptionId])
   @@index([status])
   @@index([issuedAt])
+  @@index([subscriptionId, status])
   @@map("invoices")
 }
 
 model Payment {
-  id                   Int           @id @default(autoincrement())
+  id                   Int                 @id @default(autoincrement())
   subscriptionId       Int
-  status               PaymentStatus @default(unpaid)
+  status               PaymentStatus       @default(unpaid)
   amount               Int
-  currency             String        @default("PHP")
+  currency             String              @default("PHP")
   paymentMethod        String?
   cardBrand            String?
   cardLastFour         String?
@@ -667,20 +730,22 @@ model Payment {
   gatewayTransactionId String?
   errorMessage         String?
   failureReason        String?
-  retryCount           Int           @default(0)
+  retryCount           Int                 @default(0)
   nextRetryAt          DateTime?
-  idempotencyKey       String?       @unique
-  verifiedAt           DateTime?
-  expiresAt            DateTime?
+  idempotencyKey       String?             @unique
   metadata             Json?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @default(now())
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @default(now())
+  expiresAt            DateTime?
+  verifiedAt           DateTime?
   invoices             Invoice[]
-  subscription         Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription         Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  upgradeRequest       PlanUpgradeRequest? @relation("PlanUpgradePayment")
 
   @@index([subscriptionId])
   @@index([status])
   @@index([createdAt])
+  @@index([status, nextRetryAt])
   @@map("payments")
 }
 
@@ -723,6 +788,59 @@ model BillingPreference {
   @@map("billing_preferences")
 }
 
+model PlanUpgradeRequest {
+  id                 Int           @id @default(autoincrement())
+  tenantId           Int           @unique
+  currentPlan        String
+  newPlan            String
+  status             UpgradeStatus @default(pending)
+  amountDue          Int
+  prorationDetails   Json
+  paymentId          Int?          @unique
+  requestedAt        DateTime      @default(now())
+  paymentSubmittedAt DateTime?
+  approvedAt         DateTime?
+  appliedAt          DateTime?
+  cancelledAt        DateTime?
+  expiresAt          DateTime
+  approvedBy         Int?
+  approvalNotes      String?
+  payment            Payment?      @relation("PlanUpgradePayment", fields: [paymentId], references: [id])
+  subscription       Subscription  @relation("TenantUpgradeRequestSubscription", fields: [tenantId], references: [tenantId], onDelete: Cascade, map: "plan_upgrade_requests_tenantId_subscription_fkey")
+  tenant             Tenant        @relation("TenantUpgradeRequest", fields: [tenantId], references: [id], onDelete: Cascade, map: "plan_upgrade_requests_tenantId_tenant_fkey")
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("plan_upgrade_requests")
+}
+
+model AdminSettings {
+  id                    Int      @id @default(autoincrement())
+  adminGcashPhoneNumber String?
+  adminGcashAccountName String?
+  adminGcashQrCodeUrl   String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+
+  @@map("admin_settings")
+}
+
+model OTP {
+  id        Int      @id @default(autoincrement())
+  email     String
+  otp       String
+  userType  String   @default("tenant")
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([email])
+  @@index([userType])
+  @@map("otps")
+}
+
 enum UserRole {
   admin
   tenant_owner
@@ -761,6 +879,15 @@ enum BillingCycle {
   trial
 }
 
+enum UpgradeStatus {
+  pending
+  payment_submitted
+  approved
+  applied
+  cancelled
+  expired
+}
+
 enum InvoiceStatus {
   draft
   issued
@@ -782,30 +909,3 @@ enum EmployeeRole {
   manager
   admin
 }
-
-model AdminSettings {
-  id                      Int       @id @default(autoincrement())
-  adminGcashPhoneNumber   String?
-  adminGcashAccountName   String?
-  adminGcashQrCodeUrl     String?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @default(now())
-
-  @@map("admin_settings")
-}
-
-model OTP {
-  id        Int       @id @default(autoincrement())
-  email     String
-  otp       String
-  userType  String    @default("tenant") // tenant or customer
-  expiresAt DateTime
-  attempts  Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-
-  @@index([email])
-  @@index([userType])
-  @@map("otps")
-}
-

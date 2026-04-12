@@ -33,59 +33,62 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch all subscriptions with tenant data
-    const subscriptions = await prisma.subscription.findMany({
+    // Fetch all tenants with their subscription data
+    const tenants = await prisma.tenant.findMany({
       include: {
-        tenant: {
+        subscription: {
           select: {
             id: true,
-            name: true,
-            isActive: true,
+            planId: true,
+            status: true,
+            currentPeriodStart: true,
+            currentPeriodEnd: true,
+            renewalDate: true,
             createdAt: true,
-            owner: {
-              select: {
-                lastLogin: true,
-              },
-            },
+          },
+        },
+        owner: {
+          select: {
+            lastLogin: true,
           },
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 200,
     })
 
     // Map to subscription format
-    const formattedSubscriptions = subscriptions.map((subscription) => {
-      const plan = subscription.planId || 'trial'
+    const formattedSubscriptions = tenants.map((tenant) => {
+      const subscription = tenant.subscription
+      const plan = subscription?.planId || 'trial'
       const price = PLAN_PRICING[plan as keyof typeof PLAN_PRICING] || 0
       const billingCycle = PLAN_BILLING_CYCLE[plan as keyof typeof PLAN_BILLING_CYCLE] || 'monthly'
       
-      // Determine status
-      let status: 'active' | 'trial' | 'cancelled' | 'expired' = subscription.status as 'active' | 'trial' | 'cancelled' | 'expired'
-      if (!subscription.tenant.isActive) {
-        status = 'cancelled'
-      } else if (subscription.currentPeriodEnd && new Date(subscription.currentPeriodEnd) < new Date()) {
+      // Determine status - use subscription status directly, but handle expired logic
+      let status: 'active' | 'trial' | 'cancelled' | 'expired' = (subscription?.status as 'active' | 'trial' | 'cancelled' | 'expired') || 'trial'
+      
+      // Only mark as expired if subscription is active but past due date
+      if (status === 'active' && subscription?.currentPeriodEnd && new Date(subscription.currentPeriodEnd) < new Date()) {
         status = 'expired'
       }
 
       // Calculate days remaining
       let daysRemaining = undefined
-      if (subscription.currentPeriodEnd) {
+      if (subscription?.currentPeriodEnd) {
         daysRemaining = Math.max(0, Math.floor((new Date(subscription.currentPeriodEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       }
 
       return {
-        id: subscription.id.toString(),
-        tenantId: subscription.tenant.id.toString(),
-        tenantName: subscription.tenant.name,
+        id: subscription?.id.toString() || tenant.id.toString(),
+        tenantId: tenant.id.toString(),
+        tenantName: tenant.name,
         plan: plan.charAt(0).toUpperCase() + plan.slice(1),
         price,
         billingCycle,
         status,
-        startDate: subscription.currentPeriodStart,
-        renewalDate: subscription.renewalDate || subscription.currentPeriodEnd,
-        createdAt: subscription.createdAt,
-        lastLogin: subscription.tenant.owner?.lastLogin,
+        startDate: subscription?.currentPeriodStart || tenant.createdAt,
+        renewalDate: subscription?.renewalDate || subscription?.currentPeriodEnd || tenant.createdAt,
+        createdAt: subscription?.createdAt || tenant.createdAt,
+        lastLogin: tenant.owner?.lastLogin,
         daysRemaining,
       }
     })

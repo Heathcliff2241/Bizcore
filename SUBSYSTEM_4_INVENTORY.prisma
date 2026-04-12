@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// SUBSYSTEM 4: INVENTORY MANAGEMENT (includes dependencies from Subsystems 1 & 2)
+// ============================================================================
+
+model Tenant {
+  id        Int       @id @default(autoincrement())
+  name      String
+  subdomain String    @unique
+  createdAt DateTime  @default(now())
+
+  ingredients           Ingredient[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("tenants")
+}
+
+model Ingredient {
+  id                    Int                    @id @default(autoincrement())
+  tenantId              Int
+  name                  String
+  description           String?
+  unit                  String                 @default("pieces")
+  currentStock          Float                  @default(0)
+  minStock              Float                  @default(0)
+  costPerUnit           Float                  @default(0)
+  supplier              String?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+  reservedStock         Float                  @default(0)
+
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("ingredients")
+}
+
+model InventoryTransaction {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  ingredientId Int
+  type        String
+  quantity    Float
+  reason      String
+  cost        Float     @default(0)
+  performedBy String?
+  createdAt   DateTime  @default(now())
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@map("inventory_transactions")
+}

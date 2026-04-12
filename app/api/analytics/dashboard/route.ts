@@ -72,10 +72,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Apply status filter if provided
+    // Apply status filter if provided, otherwise filter for paid and completed orders
     const orderWhereClause = {
       ...whereClause,
-      ...(statuses.length > 0 && { status: { in: statuses } })
+      ...(statuses.length > 0 
+        ? { status: { in: statuses } }
+        : { paymentStatus: 'paid', status: { in: ['completed', 'delivered'] } }
+      )
     }
 
     // Fetch orders with all relationships

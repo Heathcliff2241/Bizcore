@@ -17,13 +17,20 @@ interface Address {
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const customer = await prisma.customer.findFirst({
-      where: { email: session.user.email }
-    })
+    let customer
+    if (session.user.id) {
+      customer = await prisma.customer.findUnique({
+        where: { id: parseInt(session.user.id) }
+      })
+    } else {
+      customer = await prisma.customer.findFirst({
+        where: { email: session.user.email }
+      })
+    }
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
@@ -41,13 +48,20 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const customer = await prisma.customer.findFirst({
-      where: { email: session.user.email }
-    })
+    let customer
+    if (session.user.id) {
+      customer = await prisma.customer.findUnique({
+        where: { id: parseInt(session.user.id) }
+      })
+    } else {
+      customer = await prisma.customer.findFirst({
+        where: { email: session.user.email }
+      })
+    }
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })

@@ -39,7 +39,7 @@ storefront,
 
   return (
     <section
-      className="relative w-full overflow-hidden flex items-center"
+      className="relative w-full overflow-hidden flex items-center min-h-screen sm:min-h-[600px]"
       style={{
         height: `${height}px`,
         backgroundColor: backgroundImage ? "transparent" : backgroundColor,
@@ -61,7 +61,7 @@ storefront,
 
       {/* Content */}
       <motion.div
-        className={`relative z-10 w-full ${
+        className={`relative z-10 w-full px-4 sm:px-6 md:px-8 ${
           alignment === "center"
             ? "text-center"
             : alignment === "right"
@@ -78,16 +78,16 @@ storefront,
         viewport={{ once: true }}
       >
           <h1
-            className="font-bold mb-6 leading-tight tracking-tight"
-            style={{ color: textColor, fontSize: `${headingSize}px` }}
+            className="font-bold mb-4 sm:mb-6 leading-tight tracking-tight text-3xl sm:text-4xl md:text-5xl lg:text-6xl"
+            style={{ color: textColor, fontSize: `clamp(28px, 6vw, ${headingSize}px)` }}
           >
             {heading}
           </h1>
 
           {subheading && (
             <p
-              className="mb-8 opacity-90"
-              style={{ color: textColor, fontSize: `${subheadingSize}px` }}
+              className="mb-6 sm:mb-8 opacity-90 text-lg sm:text-xl md:text-2xl"
+              style={{ color: textColor, fontSize: `clamp(16px, 4vw, ${subheadingSize}px)` }}
             >
               {subheading}
             </p>
@@ -100,7 +100,7 @@ storefront,
               rel={ctaLink.isExternal ? "noopener noreferrer" : undefined}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.97 }}
-              className="inline-block px-8 py-4 bg-white text-gray-900 font-semibold rounded-xl shadow-md hover:shadow-xl transition-all text-lg"
+              className="inline-block px-4 sm:px-6 md:px-8 py-3 sm:py-4 bg-white text-gray-900 font-semibold rounded-lg sm:rounded-xl shadow-md hover:shadow-xl transition-all text-base sm:text-lg"
             >
               {ctaText}
             </motion.a>

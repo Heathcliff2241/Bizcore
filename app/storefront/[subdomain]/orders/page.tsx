@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth/next'
-import { customerAuthOptions } from '@/lib/customerAuth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FooterSection } from '@/components/storefront/FooterSection'
 import { HeaderSection } from '@/components/storefront/HeaderSection'
@@ -29,7 +29,7 @@ export default async function OrdersPage({ params }: Props) {
     return notFound()
   }
 
-  const session = await getServerSession(customerAuthOptions)
+  const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
   redirect(`/auth/signin?redirect=/storefront/${subdomain}/orders`)
   }

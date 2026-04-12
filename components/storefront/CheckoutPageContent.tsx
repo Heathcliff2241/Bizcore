@@ -59,7 +59,11 @@ export function CheckoutPageContent({ storefront }: CheckoutPageContentProps) {
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0)
   const tax = subtotal * 0.12 // 12% VAT
-  const deliveryFee = deliveryType === 'delivery' ? 50 : 0
+  // Get delivery fee from tenant settings or default to 50
+  const settingsObj = storefront.settings as Record<string, unknown> | undefined
+  const deliverySettings = settingsObj?.delivery as Record<string, number> | undefined
+  const defaultDeliveryFee = deliverySettings?.defaultDeliveryFee ?? 50
+  const deliveryFee = deliveryType === 'delivery' ? defaultDeliveryFee : 0
   const total = subtotal + tax + deliveryFee
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -167,7 +171,7 @@ export function CheckoutPageContent({ storefront }: CheckoutPageContentProps) {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Your cart is empty</h2>
             <p className="text-gray-600 mb-6">Add some items before checking out</p>
             <button
-              onClick={() => router.push(resolveStorefrontHref('/menu', storefront).href)}
+              onClick={() => router.push(resolveStorefrontHref('/home', storefront).href)}
               className="bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700"
             >
               Browse Menu

@@ -9,9 +9,12 @@ import {
   ClockIcon,
   TruckIcon,
   XCircleIcon,
-  EyeIcon
+  EyeIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline'
 import { useSettings } from '@/lib/settings-context'
+import { exportFromAPI } from '@/lib/csv-export'
+import { useRecentItems } from '@/hooks/useRecentItems'
 
 interface OrderItem {
   id: number
@@ -42,6 +45,9 @@ interface Order {
   amount_paid?: number
   order_type?: string
   paymentProof?: string
+  employee_name?: string | null
+  employee_email?: string | null
+  employee_role?: string | null
   OrderItems?: OrderItem[]
 }
 
@@ -120,6 +126,10 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [stats, setStats] = useState<Stats>(defaultStats)
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
+
+  // Recent items tracking
+  const { addRecentItem } = useRecentItems(subdomain)
 
   const querySuffix = useMemo(
     () => (subdomain ? `?subdomain=${encodeURIComponent(subdomain)}` : ''),
@@ -229,13 +239,22 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
 
         if (data) {
           setSelectedOrder(data)
+          
+          // Track as recent item
+          addRecentItem({
+            id: data.id,
+            type: 'order',
+            title: data.order_number,
+            subtitle: data.customer_name,
+            url: subdomain ? `/dashboard/${subdomain}/orders` : '/orders',
+          })
         }
       } catch (error) {
         console.error('Failed to fetch order details:', error)
         alert(error instanceof Error ? error.message : 'Failed to fetch order details')
       }
     },
-    [orderEndpoint]
+    [orderEndpoint, addRecentItem, subdomain]
   )
 
   const updatePaymentStatus = useCallback(
@@ -262,7 +281,7 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
         const payload = await response.json()
         const updated: Order | undefined = payload?.data?.order
 
-        await fetchOrders()
+        await Promise.all([fetchOrders(), fetchStats()])
 
         if (updated) {
           setSelectedOrder((previous) => (previous?.id === orderId ? updated : previous))
@@ -274,8 +293,38 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
         setUpdatingStatus(null)
       }
     },
-    [fetchOrders, orderEndpoint]
+    [fetchOrders, fetchStats, orderEndpoint]
   )
+
+  const handleExportCSV = useCallback(async () => {
+    if (!subdomain) {
+      alert('Subdomain is required for export')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const params = new URLSearchParams({
+        subdomain,
+        ...(statusFilter !== 'all' && { status: statusFilter }),
+        ...(searchTerm && { search: searchTerm }),
+      })
+
+      const result = await exportFromAPI(
+        `/api/tenant/export/orders?${params}`,
+        `orders_export_${subdomain}_${new Date().toISOString().split('T')[0]}`
+      )
+
+      if (!result.success) {
+        alert(result.error || 'Failed to export orders')
+      }
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export orders')
+    } finally {
+      setExporting(false)
+    }
+  }, [subdomain, statusFilter, searchTerm])
 
   const filteredOrders = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
@@ -340,6 +389,19 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
             Manage and track customer orders for {subdomain || 'your store'}
           </p>
         </div>
+        <button
+          onClick={handleExportCSV}
+          disabled={exporting || filteredOrders.length === 0}
+          className="flex items-center gap-2 px-4 py-2 border rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          style={{
+            borderColor: `${theme.primary}40`,
+            color: theme.primary,
+            backgroundColor: 'white',
+          }}
+        >
+          <ArrowDownTrayIcon className="w-5 h-5" />
+          {exporting ? 'Exporting...' : 'Export CSV'}
+        </button>
       </motion.div>
 
       <motion.div 
@@ -736,6 +798,26 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
                 </div>
               </div>
 
+              {selectedOrder.employee_name && (
+                <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                  <h4 className="font-semibold text-gray-900 mb-2">Employee Information</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Name:</span>
+                      <span className="ml-2 text-gray-900">{selectedOrder.employee_name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Email:</span>
+                      <span className="ml-2 text-gray-900">{selectedOrder.employee_email ?? '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Role:</span>
+                      <span className="ml-2 capitalize text-gray-900">{selectedOrder.employee_role ?? '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {selectedOrder.delivery_address && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-xl">
                   <h4 className="font-semibold text-gray-900 mb-2">Delivery Address</h4>
@@ -831,6 +913,18 @@ export function OrdersManager({ subdomain }: OrdersManagerProps) {
                     >
                       📥 Download Proof
                     </a>
+                  </div>
+                </div>
+              )}
+
+              {!selectedOrder.paymentProof && ['gcash', 'maya'].includes(selectedOrder.payment_method || '') && (
+                <div className="mb-6 p-4 bg-red-50 rounded-xl border border-red-200">
+                  <div className="flex items-start gap-3">
+                    <span className="text-red-600 text-xl">⚠️</span>
+                    <div>
+                      <h4 className="font-semibold text-red-900 mb-1">Missing Payment Proof</h4>
+                      <p className="text-sm text-red-800">This {selectedOrder.payment_method} payment has no proof of payment uploaded. Please follow up with the customer if needed.</p>
+                    </div>
                   </div>
                 </div>
               )}

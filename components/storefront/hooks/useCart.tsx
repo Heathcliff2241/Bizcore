@@ -54,6 +54,24 @@ export function useCart(subdomain: string | undefined, userId?: string | null) {
   const [localCart, setLocalCart] = useState<CartItem[]>(() => {
     try {
       if (typeof window === 'undefined') return []
+      
+      // If user just logged in, try to migrate cart from guest key
+      if (userId) {
+        const guestKey = `storefront_cart_${subdomain ?? 'global'}_guest`
+        const guestCart = localStorage.getItem(guestKey)
+        
+        // If user has no cart but guest cart exists, migrate it
+        const userCartRaw = localStorage.getItem(key)
+        if (!userCartRaw && guestCart) {
+          console.log('[useCart] Migrating guest cart to user cart after login')
+          const guestCartData = JSON.parse(guestCart) as CartItem[]
+          localStorage.setItem(key, JSON.stringify(guestCartData))
+          // Clear guest cart after migration
+          localStorage.removeItem(guestKey)
+          return guestCartData
+        }
+      }
+      
       const raw = localStorage.getItem(key)
       return raw ? (JSON.parse(raw) as CartItem[]) : []
     } catch (e) {
@@ -64,6 +82,11 @@ export function useCart(subdomain: string | undefined, userId?: string | null) {
 
   // Use context cart if available, otherwise use local state
   const cart = carts[key] || localCart
+
+  // Log initialization once when key changes
+  useEffect(() => {
+    console.log('[useCart] Initialized with:', { subdomain, userId, key })
+  }, [key, subdomain, userId])
 
   // Sync context updates to localStorage
   useEffect(() => {
@@ -84,15 +107,18 @@ export function useCart(subdomain: string | undefined, userId?: string | null) {
   }, [userId, key, updateCart])
 
   const addToCart = useCallback((item: CartItem) => {
+    console.log('[addToCart] Adding item:', { item, currentCart: cart, key })
     const existing = cart.find((i) => i.id === item.id)
     if (existing) {
       const newQuantity = (Number(existing.quantity) || 0) + (Number(item.quantity) || 1)
       const newCart = cart.map((i) => (i.id === item.id ? { ...i, quantity: newQuantity } : i))
+      console.log('[addToCart] Updated quantity - new cart:', newCart)
       updateCart(key, newCart)
       return newCart
     }
     const newItem = { ...item, quantity: Number(item.quantity) || 1 }
     const newCart = [...cart, newItem]
+    console.log('[addToCart] New item added - new cart:', newCart)
     updateCart(key, newCart)
     return newCart
   }, [cart, key, updateCart])

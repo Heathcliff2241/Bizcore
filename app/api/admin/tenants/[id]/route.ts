@@ -1,12 +1,19 @@
 import { prisma } from '@/lib/prisma'
 import { logTenantActivity } from '@/lib/activityLogger'
 import { sendTenantDeactivationEmail } from '@/lib/email/tenantEmails'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
 
 type Params = Promise<{ id: string }>
 
 export async function GET(request: NextRequest, { params }: { params: Params }) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id || session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const tenantId = parseInt(id)
 

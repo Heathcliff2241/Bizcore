@@ -52,12 +52,12 @@ export function CTASection({
 
   return (
     <section 
-      className={`w-full ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}
+      className={`w-full px-4 sm:px-6 md:px-8 lg:px-12 ${fullWidth ? '' : 'px-8 md:px-16 lg:px-24'}`}
       style={sectionStyle}
     >
       <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} text-center`}>
         <h2 
-          className="text-4xl md:text-5xl font-bold mb-6"
+          className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6"
           style={{ color: textColor }}
         >
           {heading}
@@ -65,7 +65,7 @@ export function CTASection({
         
         {subheading && (
           <p 
-            className="text-xl md:text-2xl mb-8 opacity-90"
+            className="text-base sm:text-lg md:text-xl lg:text-2xl mb-6 sm:mb-8 opacity-90"
             style={{ color: textColor }}
           >
             {subheading}
@@ -77,7 +77,7 @@ export function CTASection({
             href={buttonLink.href}
             target={buttonLink.isExternal ? '_blank' : undefined}
             rel={buttonLink.isExternal ? 'noopener noreferrer' : undefined}
-            className="inline-block px-8 py-4 font-semibold rounded-lg hover:opacity-90 transition-opacity text-lg shadow-lg"
+            className="inline-block px-4 sm:px-6 md:px-8 py-3 sm:py-4 font-semibold rounded-lg hover:opacity-90 transition-opacity text-base sm:text-lg shadow-lg"
             style={{ 
               backgroundColor: buttonColor,
               color: backgroundColor 

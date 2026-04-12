@@ -86,16 +86,16 @@ export function FooterGlass({
         }}
       >
         <div className={containerClass}>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
             {/* Brand section */}
             <div>
               <h3
                 style={{ color: textColor }}
-                className="text-lg font-bold mb-4"
+                className="text-base sm:text-lg font-bold mb-2 sm:mb-4"
               >
                 {companyName}
               </h3>
-              <p style={{ color: textColor, opacity: 0.8 }} className="text-sm">
+              <p style={{ color: textColor, opacity: 0.8 }} className="text-xs sm:text-sm">
                 Creating exceptional digital experiences for modern commerce.
               </p>
             </div>
@@ -129,20 +129,20 @@ export function FooterGlass({
 
             {/* Contact info */}
             <div>
-              <h4 style={{ color: textColor }} className="text-sm font-semibold mb-4">
+              <h4 style={{ color: textColor }} className="text-xs sm:text-sm font-semibold mb-2 sm:mb-4">
                 Contact
               </h4>
-              <div className="space-y-2 text-sm" style={{ color: textColor, opacity: 0.7 }}>
+              <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm" style={{ color: textColor, opacity: 0.7 }}>
                 <div className="flex items-center gap-2">
-                  <Mail size={16} />
+                  <Mail size={14} />
                   <span>support@brand.com</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Phone size={16} />
+                  <Phone size={14} />
                   <span>+1 (555) 000-0000</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <MapPin size={16} />
+                  <MapPin size={14} />
                   <span>City, Country</span>
                 </div>
               </div>
@@ -151,10 +151,10 @@ export function FooterGlass({
             {/* Social links */}
             {socialLinks && socialLinks.length > 0 && (
               <div>
-                <h4 style={{ color: textColor }} className="text-sm font-semibold mb-4">
+                <h4 style={{ color: textColor }} className="text-xs sm:text-sm font-semibold mb-2 sm:mb-4">
                   Follow Us
                 </h4>
-                <div className="flex gap-4">
+                <div className="flex gap-3 sm:gap-4">
                   {socialLinks.map((social, idx) => (
                     <a
                       key={idx}
@@ -174,15 +174,15 @@ export function FooterGlass({
           <div
             style={{
               borderTop: `1px solid rgba(255, 255, 255, 0.1)`,
-              paddingTop: '2rem',
-              marginTop: '2rem'
+              paddingTop: 'clamp(1rem, 2vw, 2rem)',
+              marginTop: 'clamp(1rem, 2vw, 2rem)'
             }}
-            className="flex flex-col md:flex-row justify-between items-center"
+            className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4"
           >
-            <p style={{ color: textColor, opacity: 0.6 }} className="text-xs text-center md:text-left">
+            <p style={{ color: textColor, opacity: 0.6 }} className="text-xs text-center sm:text-left">
               {copyright}
             </p>
-            <div className="flex gap-6 mt-4 md:mt-0 text-xs" style={{ color: textColor, opacity: 0.6 }}>
+            <div className="flex gap-3 sm:gap-6 text-xs" style={{ color: textColor, opacity: 0.6 }}>
               <Link href="/privacy" style={{ color: 'inherit' }} className="hover:opacity-100">
                 Privacy Policy
               </Link>

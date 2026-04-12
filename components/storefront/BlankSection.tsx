@@ -22,18 +22,13 @@ export function BlankSection({
       style={{
         backgroundColor,
         color: textColor,
-        height: `${height}px`,
+        minHeight: `clamp(200px, 50vh, ${height}px)`,
+        position: 'relative',
+        zIndex: 0,
       }}
     >
-      <div className={`w-full ${!fullWidth ? 'px-8 md:px-16 lg:px-24' : ''} h-full overflow-visible`}>
-        <div className="flex items-center justify-center h-full">
-          <div
-            className="text-sm font-medium"
-            style={{ color: textColor }}
-          >
-            Blank Section
-          </div>
-        </div>
+      <div className={`w-full ${!fullWidth ? 'px-4 sm:px-6 md:px-8 lg:px-12' : ''} h-full overflow-visible`}>
+        {/* Blank section content - supports child elements overlay */}
       </div>
     </section>
   );

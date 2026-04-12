@@ -6,6 +6,10 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   images: {
     domains: ['bizcore.test', 'localhost', '127.0.0.1'],
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [320, 480, 640, 768, 1024, 1280, 1440, 1536],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 31536000,
   },
   typescript: {
     ignoreBuildErrors: true,
@@ -14,13 +18,13 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   transpilePackages: ['lucide-react'],
-  // Enable compression for faster response times
   compress: true,
-  // Configure turbopack (replaces experimental.turbo)
-  turbopack: {
-    resolveAlias: {
-      '@': './app',
-    },
+  // Increase body size limit to handle payment proof uploads
+  onDemandEntries: {
+    // period (in ms) where the server will keep pages in the buffer
+    maxInactiveAge: 25 * 1000,
+    // number of pages that should be kept simultaneously without being disposed
+    pagesBufferLength: 5,
   },
   // CORS headers for handling requests from different origins
   async headers() {

@@ -52,9 +52,9 @@ export function HeroGlass({
 
   return (
     <section
-      className="relative w-full overflow-hidden flex items-center justify-center"
+      className="relative w-full overflow-hidden flex items-center justify-center px-4 sm:px-6 md:px-8"
       style={{
-        height: `${height}px`,
+        height: `clamp(400px, 60vh, ${height}px)`,
         background: backgroundColor,
       }}
     >
@@ -112,11 +112,11 @@ export function HeroGlass({
       >
         {heading && (
           <h1
-            className="font-bold leading-tight tracking-tight"
+            className="font-bold leading-tight tracking-tight text-lg sm:text-2xl md:text-4xl"
             style={{
               color: textColor,
-              fontSize: `${Math.max(headingSize * 0.7, 28)}px`,
-              marginBottom: `${cardPadding * 0.5}px`,
+              fontSize: `clamp(24px, 6vw, ${Math.max(headingSize * 0.7, 28)}px)`,
+              marginBottom: `clamp(0.5rem, 2vw, ${cardPadding * 0.5}px)`,
               textShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
             }}
           >
@@ -126,11 +126,11 @@ export function HeroGlass({
 
         {subheading && (
           <p
-            className="opacity-85"
+            className="opacity-85 text-sm sm:text-base md:text-lg"
             style={{
               color: textColor,
-              fontSize: `${Math.max(subheadingSize * 0.7, 16)}px`,
-              marginBottom: `${cardPadding}px`,
+              fontSize: `clamp(14px, 3vw, ${Math.max(subheadingSize * 0.7, 16)}px)`,
+              marginBottom: `clamp(0.75rem, 2vw, ${cardPadding}px)`,
               textShadow: '0 1px 4px rgba(0, 0, 0, 0.1)'
             }}
           >
@@ -145,9 +145,9 @@ export function HeroGlass({
             rel={ctaLink.isExternal ? "noopener noreferrer" : undefined}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
-            className="inline-block font-semibold rounded-lg border-none transition-all"
+            className="inline-block font-semibold rounded-lg border-none transition-all text-sm sm:text-base"
             style={{
-              padding: `${cardPadding * 0.5}px ${cardPadding}px`,
+              padding: `clamp(0.5rem, 1vw, ${cardPadding * 0.5}px) clamp(0.75rem, 2vw, ${cardPadding}px)`,
               backgroundColor: '#ffffff',
               color: '#111827',
               fontSize: `${Math.max(14, subheadingSize * 0.5)}px`,

@@ -1,4 +1,4 @@
-import { ProductsManager } from '@/components/dashboard/products/ProductsManager'
+import { redirect } from 'next/navigation'
 
 interface ProductsPageProps {
   params: Promise<{
@@ -8,5 +8,5 @@ interface ProductsPageProps {
 
 export default async function ProductsPage({ params }: ProductsPageProps) {
   const { subdomain } = await params
-  return <ProductsManager subdomain={subdomain} />
+  redirect(`/dashboard/${subdomain}/catalog?tab=products`)
 }

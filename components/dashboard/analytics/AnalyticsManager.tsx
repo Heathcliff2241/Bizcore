@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import {
-  LineChart, Line, PieChart, Pie, Cell,
+  LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import {
@@ -58,6 +58,8 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
     primary: settings.brandColors.primary,
     secondary: settings.brandColors.secondary,
     accent: settings.brandColors.accent,
+    background: settings.brandColors.background,
+    surface: settings.brandColors.surface,
     text: settings.brandColors.text
   }
 
@@ -349,39 +351,137 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-32 bg-gray-200 rounded-2xl animate-pulse" />
-      </div>
+      <motion.main 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="flex-1 p-8" 
+        style={{ backgroundColor: theme.background || '#f9fafb' }}
+      >
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center justify-between mb-8"
+        >
+          <div>
+            <h2 
+              className="text-3xl font-bold tracking-tight"
+              style={{ color: theme.text || '#111827' }}
+            >
+              {subdomain ? `${subdomain} Analytics` : 'Analytics'}
+            </h2>
+            <p 
+              className="mt-2 text-sm"
+              style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}
+            >
+              Business performance and insights for {subdomain || 'your store'}
+            </p>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col items-center justify-center py-20"
+        >
+          <div 
+            className="w-12 h-12 border-4 rounded-full animate-spin mb-4"
+            style={{ 
+              borderTopColor: 'transparent',
+              borderRightColor: `${theme.primary}30`,
+              borderBottomColor: `${theme.primary}30`,
+              borderLeftColor: `${theme.primary}30`
+            }}
+          />
+          <p className="text-sm font-medium" style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}>
+            Loading analytics...
+          </p>
+        </motion.div>
+      </motion.main>
     )
   }
 
   if (!data) {
     return (
-      <div className="text-center py-12 text-red-600">
-        {error || 'No data available'}
-      </div>
+      <motion.main 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="flex-1 p-8" 
+        style={{ backgroundColor: theme.background || '#f9fafb' }}
+      >
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center justify-between mb-8"
+        >
+          <div>
+            <h2 
+              className="text-3xl font-bold tracking-tight"
+              style={{ color: theme.text || '#111827' }}
+            >
+              {subdomain ? `${subdomain} Analytics` : 'Analytics'}
+            </h2>
+            <p 
+              className="mt-2 text-sm"
+              style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}
+            >
+              Business performance and insights for {subdomain || 'your store'}
+            </p>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center py-20"
+        >
+          <p className="text-sm font-medium" style={{ color: theme.text ? `${theme.text}80` : '#6b7280' }}>
+            {error || 'No data available'}
+          </p>
+        </motion.div>
+      </motion.main>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.main 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="flex-1 p-8" 
+      style={{ backgroundColor: theme.background || '#f9fafb' }}
+    >
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="flex items-center justify-between mb-8"
       >
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Analytics</h1>
-          <p className="text-sm mt-1" style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}>
-            Business performance overview
+          <h2 
+            className="text-3xl font-bold tracking-tight"
+            style={{ color: theme.text || '#111827' }}
+          >
+            {subdomain ? `${subdomain} Analytics` : 'Analytics'}
+          </h2>
+          <p 
+            className="mt-2 text-sm"
+            style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}
+          >
+            Business performance and insights for {subdomain || 'your store'}
           </p>
         </div>
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowReportModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold"
           style={{ backgroundColor: theme.primary }}
         >
           <Download size={18} />
@@ -393,8 +493,13 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl border p-4 flex gap-4"
-        style={{ borderColor: `${theme.primary}20` }}
+        transition={{ duration: 0.5, delay: 0.05 }}
+        className="rounded-2xl border p-6 flex gap-4"
+        style={{ 
+          borderColor: `${theme.primary}20`,
+          background: `linear-gradient(135deg, ${theme.primary}08, ${theme.secondary}08)`,
+          boxShadow: `0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px ${theme.primary}10`
+        }}
       >
         <div className="flex-1">
           <label className="block text-sm font-medium mb-2" style={{ color: theme.text }}>Start Date</label>
@@ -402,8 +507,10 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg"
-            style={{ borderColor: `${theme.primary}30` }}
+            className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2"
+            style={{ 
+              borderColor: `${theme.primary}30`
+            }}
           />
         </div>
         <div className="flex-1">
@@ -412,8 +519,10 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg"
-            style={{ borderColor: `${theme.primary}30` }}
+            className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2"
+            style={{ 
+              borderColor: `${theme.primary}30`
+            }}
           />
         </div>
       </motion.div>
@@ -423,7 +532,7 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6"
       >
         <KPICard
           title="Revenue"
@@ -455,98 +564,12 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
         />
       </motion.div>
 
-      {/* Charts */}
+      {/* Top Products & Order Status - Side by Side */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-      >
-        {/* Revenue Trend */}
-        {data.revenue.dailyTrend.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h2 className="text-xl font-bold text-slate-900 mb-6">Revenue Trend</h2>
-            <div style={{ width: '100%', height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.revenue.dailyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    stroke="#6b7280"
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }}
-                    stroke="#6b7280"
-                    tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip 
-                    formatter={(value) => `₱${(value as number).toLocaleString()}`}
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#3b82f6" 
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* Order Status */}
-        {Object.keys(data.orderStatusBreakdown).length > 0 && (
-          <div
-            className="bg-white rounded-2xl p-6 border"
-            style={{
-              borderColor: `${theme.primary}20`,
-              boxShadow: `0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px ${theme.primary}10`
-            }}
-          >
-            <h3 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-              Order Status
-            </h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={Object.entries(data.orderStatusBreakdown).map(([name, value]) => ({ 
-                    name: name.charAt(0).toUpperCase() + name.slice(1), 
-                    value 
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {Object.entries(data.orderStatusBreakdown).map((_, idx) => (
-                    <Cell 
-                      key={`cell-${idx}`} 
-                      fill={[theme.primary, theme.secondary, theme.accent, '#f59e0b', '#ef4444'][idx % 5]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `${value} orders`} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Top Products & Recent Orders */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"
       >
         {/* Top Products */}
         {data.topProducts.length > 0 && (
@@ -578,48 +601,91 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
           </div>
         )}
 
-        {/* Recent Orders */}
-        {data.recentOrders.length > 0 && (
+        {/* Order Status */}
+        {data.orderStatusBreakdown && Object.keys(data.orderStatusBreakdown).length > 0 && (
           <div
-            className="bg-white rounded-2xl p-6 border overflow-x-auto"
+            className="bg-white rounded-2xl p-6 border"
             style={{
               borderColor: `${theme.primary}20`,
               boxShadow: `0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px ${theme.primary}10`
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-              Recent Orders
+              Order Status
             </h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottomColor: `${theme.primary}20` }} className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold text-xs" style={{ color: theme.text }}>Order</th>
-                  <th className="text-left py-3 px-4 font-semibold text-xs" style={{ color: theme.text }}>Customer</th>
-                  <th className="text-left py-3 px-4 font-semibold text-xs" style={{ color: theme.text }}>Amount</th>
-                  <th className="text-left py-3 px-4 font-semibold text-xs" style={{ color: theme.text }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentOrders.map((order) => (
-                  <tr key={order.id} style={{ borderBottomColor: `${theme.primary}10` }} className="border-b">
-                    <td className="py-3 px-4" style={{ color: theme.primary }}>#{order.orderNumber}</td>
-                    <td className="py-3 px-4 text-xs" style={{ color: theme.text }}>{order.customerName}</td>
-                    <td className="py-3 px-4 font-semibold text-xs" style={{ color: theme.text }}>₱{order.total.toFixed(2)}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className="inline-block px-2 py-1 rounded text-xs font-medium"
-                        style={{
-                          backgroundColor: `${theme.secondary}20`,
-                          color: theme.secondary
-                        }}
-                      >
-                        {order.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-3">
+              {Object.entries(data.orderStatusBreakdown).map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: `${theme.primary}05` }}>
+                  <div>
+                    <p className="font-medium text-sm" style={{ color: theme.text }}>{status}</p>
+                  </div>
+                  <p className="font-semibold" style={{ color: theme.primary }}>
+                    {count}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Charts - Revenue Trend Full Width */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-6"
+      >
+        {/* Revenue Trend */}
+        {data.revenue.dailyTrend.length > 0 && (
+          <>
+            <h2 className="text-xl font-bold text-slate-900 mb-6">Revenue Trend</h2>
+            <div style={{ width: '100%', height: '400px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data.revenue.dailyTrend} margin={{ top: 5, right: 30, left: 0, bottom: 80 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                    angle={-45}
+                    textAnchor="end"
+                    height={100}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                    tickFormatter={(value) => {
+                      if (value >= 1000) return `₱${(value / 1000).toFixed(1)}K`
+                      return `₱${value.toFixed(0)}`
+                    }}
+                  />
+                  <Tooltip 
+                    formatter={(value) => `₱${(value as number).toLocaleString()}`}
+                    labelFormatter={(label) => `Date: ${label}`}
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3}
+                    dot={{ fill: '#3b82f6', r: 4 }}
+                    activeDot={{ r: 6 }}
+                    isAnimationActive={true}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+        {data.revenue.dailyTrend.length === 0 && (
+          <div className="h-96 flex items-center justify-center bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-slate-500">No revenue data available</p>
           </div>
         )}
       </motion.div>
@@ -788,7 +854,7 @@ export function AnalyticsManager({ subdomain }: { subdomain?: string }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.main>
   )
 }
 
@@ -809,9 +875,11 @@ function KPICard({
 
   return (
     <motion.div
-      whileHover={{ y: -4 }}
-      className="bg-white rounded-2xl p-6 border"
+      whileHover={{ y: -4, scale: 1.02 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      className="p-6 bg-white border rounded-2xl shadow-sm backdrop-blur-xl"
       style={{
+        background: `linear-gradient(135deg, ${theme.primary}08, ${theme.secondary}08)`,
         borderColor: `${theme.primary}20`,
         boxShadow: `0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px ${theme.primary}10`
       }}
@@ -821,7 +889,7 @@ function KPICard({
           <p className="text-sm font-medium" style={{ color: theme.text ? `${theme.text}99` : '#6b7280' }}>
             {title}
           </p>
-          <p className="text-2xl font-bold mt-2" style={{ color: theme.text }}>
+          <p className="text-3xl font-bold mt-2" style={{ color: theme.text }}>
             {value}
           </p>
           {change !== null && (
@@ -831,17 +899,17 @@ function KPICard({
               ) : (
                 <TrendingDown size={14} style={{ color: '#ef4444' }} />
               )}
-              <span style={{ color: isPositive ? '#10b981' : '#ef4444', fontSize: '12px' }}>
+              <span style={{ color: isPositive ? '#10b981' : '#ef4444', fontSize: '12px', fontWeight: '600' }}>
                 {isPositive ? '+' : ''}{change.toFixed(1)}%
               </span>
             </div>
           )}
         </div>
         <div
-          className="p-3 rounded-xl"
+          className="p-4 rounded-xl transition-transform duration-200"
           style={{ backgroundColor: `${theme.primary}15` }}
         >
-          <Icon width={24} height={24} style={{ color: theme.primary }} />
+          <Icon width={28} height={28} style={{ color: theme.primary }} />
         </div>
       </div>
     </motion.div>

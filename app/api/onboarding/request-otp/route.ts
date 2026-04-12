@@ -102,9 +102,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Send OTP email
+    // Send OTP email with 'verify' purpose for email verification during onboarding
     try {
-      await sendOtpEmail(normalizedEmail, otp, 10)
+      await sendOtpEmail(normalizedEmail, otp, 30, 'verify')
     } catch (emailError) {
       console.error('Failed to send OTP email:', emailError)
       // Don't fail the request if email fails, but log it

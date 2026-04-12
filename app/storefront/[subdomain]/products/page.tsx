@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getServerSession } from 'next-auth'
-import { customerAuthOptions } from '@/lib/customerAuth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ProductGrid } from '@/components/storefront/ProductGrid'
 import { PageRenderer } from '@/components/storefront/PageRenderer'
@@ -26,7 +26,7 @@ export default async function ProductsIndex({ params }: { params: Promise<{ subd
   const tenant = await prisma.tenant.findUnique({ where: { subdomain } })
   if (!tenant) return notFound()
 
-  const session = await getServerSession(customerAuthOptions)
+  const session = await getServerSession(authOptions)
 
   const storefront = buildStorefrontObject(tenant)
 

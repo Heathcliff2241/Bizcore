@@ -62,6 +62,25 @@ export async function GET(request: NextRequest) {
     const expiresAtTime = payment.metadata?.expiresAt ? new Date(payment.metadata.expiresAt as string) : null;
     const isExpired = expiresAtTime && expiresAtTime < now;
 
+    // Update associated invoice status if payment status has changed
+    if (isExpired || payment.status === 'rejected' || payment.status === 'failed') {
+      await prisma.invoice.updateMany({
+        where: { paymentId: payment.id },
+        data: { 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          status: (isExpired ? 'cancelled' : 'failed') as any
+        }
+      });
+    } else if (payment.status === 'paid') {
+      await prisma.invoice.updateMany({
+        where: { paymentId: payment.id },
+        data: { 
+          status: 'paid',
+          paidAt: new Date()
+        }
+      });
+    }
+
     return NextResponse.json({
       id: payment.id,
       status: isExpired ? 'expired' : payment.status,

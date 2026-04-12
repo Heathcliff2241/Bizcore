@@ -580,13 +580,10 @@ function createSignUpPage(businessName: string): DefaultPageTemplate {
 
 // Generate all default pages for a new tenant
 export function generateDefaultPages(businessName: string): DefaultPageTemplate[] {
+  // Only create the home page - all other pages are hardcoded
+  // This aligns with the single-page e-commerce model where only /home is customizable via BrandStudio
   return [
-    createHomePage(businessName),
-    createMenuPage(businessName),
-    createCartPage(businessName),
-    createAccountPage(businessName),
-    createLoginPage(businessName),
-    createSignUpPage(businessName)
+    createHomePage(businessName)
   ]
 }
 

@@ -23,7 +23,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         isActive: true
       },
       include: {
-        category: true
+        category: true,
+        productVariants: {
+          where: {
+            isActive: true
+          }
+        }
       },
       orderBy: {
         createdAt: 'desc'
@@ -38,7 +43,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       description: product.description,
       price: product.price,
       image: product.image,
-      category_name: product.category?.name
+      imageUrl: product.image,
+      category_name: product.category?.name,
+      productVariants: product.productVariants || []
     }))
 
     return NextResponse.json({

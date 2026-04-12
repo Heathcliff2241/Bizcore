@@ -3,6 +3,7 @@ import { HeaderSection } from './HeaderSection'
 import { HeaderGlass } from './HeaderGlass'
 import { HeroGlass } from './HeroGlass'
 import { GlassElement } from './GlassElement'
+import { GlassSection } from './GlassSection'
 import { BlankHeaderSection } from './BlankHeaderSection'
 import { HeroSection } from './HeroSection'
 import { AboutSection } from './AboutSection'
@@ -94,6 +95,8 @@ export const componentMap: Record<string, React.ComponentType<any>> = {
   'testimonials-grid': TestimonialsSection,
   'testimonials': TestimonialsSection,
   'blank': BlankSection,
+  'blank-section': BlankSection,
+  'glass-section': GlassSection,
   
   // Layout
   'footer': FooterSection,

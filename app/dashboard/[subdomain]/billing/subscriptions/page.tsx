@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
@@ -8,12 +9,14 @@ import { UpgradeFlowModal } from '@/components/billing/UpgradeFlowModal';
 import { DowngradeWarningModal } from '@/components/billing/DowngradeWarningModal';
 import { CancellationFlowModal } from '@/components/billing/CancellationFlowModal';
 import { PauseFlowModal } from '@/components/billing/PauseFlowModal';
+import { ReactivationFlowModal } from '@/components/billing/ReactivationFlowModal';
 import { InvoiceModal } from '@/components/billing/InvoiceModal';
 import { motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { useSettings } from '@/lib/settings-context';
 import { calculateProration, calculateCancellationRefund, ProratedPrice } from '@/lib/proration';
 import { EyeIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 
 interface CurrentSubscription {
   subscription: Record<string, unknown>;
@@ -22,6 +25,23 @@ interface CurrentSubscription {
   lastPayment: Record<string, unknown> | null;
   lastInvoice: Record<string, unknown> | null;
   usageRecords: Record<string, unknown>[];
+}
+
+interface UpgradeRequest {
+  id: number;
+  tenantId: string;
+  currentPlan: string;
+  newPlan: string;
+  amountDue: number;
+  status: 'pending' | 'payment_submitted' | 'approved' | 'applied' | 'cancelled' | 'expired';
+  requestedAt: string;
+  paymentSubmittedAt?: string;
+  approvedAt?: string;
+  appliedAt?: string;
+  cancelledAt?: string;
+  expiresAt?: string;
+  gcashTransactionId?: string;
+  paymentProof?: string;
 }
 
 interface Invoice {
@@ -60,6 +80,7 @@ export default function SubscriptionPage() {
   const { data: session } = useSession();
   const { settings } = useSettings();
   const [currentSub, setCurrentSub] = useState<CurrentSubscription | null>(null);
+  const [upgradeRequest, setUpgradeRequest] = useState<UpgradeRequest | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'manage'>('overview');
@@ -76,9 +97,14 @@ export default function SubscriptionPage() {
   });
   const [cancellationModal, setCancellationModal] = useState(false);
   const [pauseModal, setPauseModal] = useState(false);
+  const [reactivationModal, setReactivationModal] = useState<{ isOpen: boolean; planId?: string }>({
+    isOpen: false,
+  });
   const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; invoice?: Invoice }>({
     isOpen: false
   });
+  const [paymentProofModal, setPaymentProofModal] = useState(false);
+  const [cancelUpgradeModal, setCancelUpgradeModal] = useState(false);
 
   // Theme styling
   const theme = {
@@ -90,56 +116,72 @@ export default function SubscriptionPage() {
     text: settings.brandColors.text,
   };
 
+  const loadSubscriptionData = async () => {
+    try {
+      const [currentRes, upgradeRes, invoicesRes, plansRes] = await Promise.all([
+        fetch('/api/tenant/subscriptions/current', {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch('/api/tenant/subscriptions/upgrade-request', {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch('/api/tenant/subscriptions/invoices?page=1&limit=10', {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch('/api/tenant/subscriptions/plans-available', {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ]);
+
+      if (currentRes.ok) {
+        const data = await currentRes.json();
+        setCurrentSub(data);
+        setAutoRenewEnabled((data.subscription as Record<string, unknown>).autoRenew as boolean);
+      } else if (!currentRes.ok) {
+        console.error('Failed to fetch current subscription:', currentRes.status);
+      }
+
+      if (upgradeRes.ok) {
+        const data = await upgradeRes.json();
+        setUpgradeRequest(data.upgradeRequest);
+      } else if (upgradeRes.status !== 404) {
+        console.error('Failed to fetch upgrade request:', upgradeRes.status);
+      }
+
+      if (invoicesRes.ok) {
+        const data = await invoicesRes.json();
+        setInvoices(data.invoices);
+      } else if (!invoicesRes.ok) {
+        console.error('Failed to fetch invoices:', invoicesRes.status);
+      }
+
+      if (plansRes.ok) {
+        const data = await plansRes.json();
+        setPlans(data.plans);
+      } else if (!plansRes.ok) {
+        console.error('Failed to fetch plans:', plansRes.status);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription data:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const [currentRes, invoicesRes, plansRes] = await Promise.all([
-          fetch('/api/tenant/subscriptions/current', {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-          fetch('/api/tenant/subscriptions/invoices?page=1&limit=10', {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-          fetch('/api/tenant/subscriptions/plans-available', {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        ]);
-
-        if (currentRes.ok) {
-          const data = await currentRes.json();
-          setCurrentSub(data);
-          setAutoRenewEnabled((data.subscription as Record<string, unknown>).autoRenew as boolean);
-        } else if (!currentRes.ok) {
-          console.error('Failed to fetch current subscription:', currentRes.status);
-        }
-
-        if (invoicesRes.ok) {
-          const data = await invoicesRes.json();
-          setInvoices(data.invoices);
-        } else if (!invoicesRes.ok) {
-          console.error('Failed to fetch invoices:', invoicesRes.status);
-        }
-
-        if (plansRes.ok) {
-          const data = await plansRes.json();
-          setPlans(data.plans);
-        } else if (!plansRes.ok) {
-          console.error('Failed to fetch plans:', plansRes.status);
-        }
-      } catch (error) {
-        console.error('Error fetching subscription data:', error);
-      } finally {
-        setLoading(false);
-      }
+      await loadSubscriptionData();
+      setLoading(false);
     };
 
     if (session?.user) {
@@ -160,9 +202,9 @@ export default function SubscriptionPage() {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(pesos / 100);
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(pesos);
   };
 
   const formatDate = (date: string) => {
@@ -213,15 +255,48 @@ export default function SubscriptionPage() {
     setUpgradeModal({ isOpen: true, planId });
   };
 
+  const handleReactivationClick = (planId: string) => {
+    setReactivationModal({ isOpen: true, planId });
+  };
+
   const handleDowngradeClick = (planId: string) => {
     setDowngradeModal({ isOpen: true, planId });
+  };
+
+  const handleReactivationConfirm = async () => {
+    // This is now handled by the ReactivationFlowModal when payment details are provided
+    // If no payment details, this would submit a reactivation request without payment
+    if (!reactivationModal.planId) return;
+
+    try {
+      const res = await fetch('/api/tenant/subscriptions/reactivation-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: reactivationModal.planId })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+
+        // Refresh data
+        await loadSubscriptionData();
+
+        setReactivationModal({ isOpen: false });
+      } else {
+        const error = await res.json();
+        throw new Error(error.error || 'Reactivation request failed');
+      }
+    } catch (error) {
+      console.error('Reactivation request error:', error);
+      throw error;
+    }
   };
 
   const handleUpgradeConfirm = async () => {
     if (!upgradeModal.planId) return;
 
     try {
-      const res = await fetch('/api/tenant/subscriptions/upgrade', {
+      const res = await fetch('/api/tenant/subscriptions/upgrade-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newPlanId: upgradeModal.planId })
@@ -229,28 +304,24 @@ export default function SubscriptionPage() {
 
       if (res.ok) {
         const data = await res.json();
-        
-        // If payment was needed, the modal will handle polling for verification
-        // If no payment needed, the upgrade is already applied
-        // In both cases, close modal and let polling or immediate success refresh the data
+
+        // Refresh upgrade request data
+        const upgradeRes = await fetch('/api/tenant/subscriptions/upgrade-request', {
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (upgradeRes.ok) {
+          const upgradeData = await upgradeRes.json();
+          setUpgradeRequest(upgradeData.upgradeRequest);
+        }
+
         setUpgradeModal({ isOpen: false });
-        
-        // Refresh subscription data after a short delay to ensure latest data
-        setTimeout(async () => {
-          const currentRes = await fetch('/api/tenant/subscriptions/current', {
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          if (currentRes.ok) {
-            const subData = await currentRes.json();
-            setCurrentSub(subData);
-          }
-        }, 500);
       } else {
-        throw new Error('Upgrade failed');
+        const error = await res.json();
+        throw new Error(error.error || 'Upgrade request failed');
       }
     } catch (error) {
-      console.error('Upgrade error:', error);
+      console.error('Upgrade request error:', error);
       throw error;
     }
   };
@@ -329,25 +400,90 @@ export default function SubscriptionPage() {
     }
   };
 
+  const handleCancelUpgrade = async () => {
+    if (!upgradeRequest) return;
+
+    try {
+      const res = await fetch(`/api/tenant/subscriptions/upgrade-request/${upgradeRequest.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' })
+      });
+
+      if (res.ok) {
+        setUpgradeRequest(null);
+        setCancelUpgradeModal(false);
+      } else {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to cancel upgrade request');
+      }
+    } catch (error) {
+      console.error('Cancel upgrade error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to cancel upgrade request');
+    }
+  };
+
+  const handleSubmitPaymentProof = async (gcashTransactionId: string, paymentProof: File) => {
+    if (!upgradeRequest) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('gcashTransactionId', gcashTransactionId);
+      formData.append('paymentProof', paymentProof);
+
+      const res = await fetch(`/api/tenant/subscriptions/upgrade-request/${upgradeRequest.id}/submit`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        // Refresh upgrade request data
+        const upgradeRes = await fetch('/api/tenant/subscriptions/upgrade-request', {
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (upgradeRes.ok) {
+          const upgradeData = await upgradeRes.json();
+          setUpgradeRequest(upgradeData.upgradeRequest);
+        }
+
+        setPaymentProofModal(false);
+      } else {
+        let errorMessage = 'Failed to submit payment proof';
+        try {
+          const error = await res.json();
+          errorMessage = error.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Server error: ${res.status} ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Submit payment proof error:', error);
+      throw error;
+    }
+  };
+
   // Calculate proration for upgrade modal
   const getUpgradeProration = (): ProratedPrice | null => {
     if (!upgradeModal.planId || !currentSub) return null;
 
-    const planPrices: Record<string, number> = {
-      trial: 0,
-      basic: 1999,
-      premium: 19999,
-      enterprise: 0
-    };
+    // CRITICAL: Use plan prices from API response instead of hardcoded values
+    const allPlanPrices = (currentSub as any).allPlans?.reduce((acc: Record<string, number>, plan: any) => {
+      acc[plan.id] = plan.price || 0;
+      return acc;
+    }, {}) || {};
 
-    const currentPrice = planPrices[currentSub.subscription.planId as string] || 0;
-    const newPrice = planPrices[upgradeModal.planId] || 0;
+    const currentPrice = allPlanPrices[(currentSub as any).subscription.planId as string] || 0;
+    const newPrice = allPlanPrices[upgradeModal.planId] || 0;
+
+    console.log('[Billing Page] Upgrade proration:', { currentPrice, newPrice, allPlanPrices });
 
     return calculateProration(
       currentPrice,
       newPrice,
-      new Date(currentSub.subscription.currentPeriodStart as string),
-      new Date(currentSub.subscription.currentPeriodEnd as string)
+      new Date((currentSub as any).subscription.currentPeriodStart as string),
+      new Date((currentSub as any).subscription.currentPeriodEnd as string)
     );
   };
 
@@ -355,41 +491,71 @@ export default function SubscriptionPage() {
   const getDowngradeProration = (): ProratedPrice | null => {
     if (!downgradeModal.planId || !currentSub) return null;
 
-    const planPrices: Record<string, number> = {
-      trial: 0,
-      basic: 1999,
-      premium: 19999,
-      enterprise: 0
-    };
+    // CRITICAL: Use plan prices from API response instead of hardcoded values
+    const allPlanPrices = (currentSub as any).allPlans?.reduce((acc: Record<string, number>, plan: any) => {
+      acc[plan.id] = plan.price || 0;
+      return acc;
+    }, {}) || {};
 
-    const currentPrice = planPrices[currentSub.subscription.planId as string] || 0;
-    const newPrice = planPrices[downgradeModal.planId] || 0;
+    const currentPrice = allPlanPrices[(currentSub as any).subscription.planId as string] || 0;
+    const newPrice = allPlanPrices[downgradeModal.planId] || 0;
+
+    console.log('[Billing Page] Downgrade proration:', { currentPrice, newPrice, allPlanPrices });
 
     return calculateProration(
       currentPrice,
       newPrice,
-      new Date(currentSub.subscription.currentPeriodStart as string),
-      new Date(currentSub.subscription.currentPeriodEnd as string)
+      new Date((currentSub as any).subscription.currentPeriodStart as string),
+      new Date((currentSub as any).subscription.currentPeriodEnd as string)
     );
+  };
+
+  // Calculate proration for reactivation modal
+  const getReactivationProration = (): ProratedPrice | null => {
+    if (!reactivationModal.planId || !currentSub) return null;
+
+    // For reactivation, calculate full price of the reactivation plan
+    // Since the subscription is cancelled, there's no proration - full amount due
+    const allPlanPrices = (currentSub as any).allPlans?.reduce((acc: Record<string, number>, plan: any) => {
+      acc[plan.id] = plan.price || 0;
+      return acc;
+    }, {}) || {};
+
+    const reactivationPrice = allPlanPrices[reactivationModal.planId] || 0;
+
+    console.log('[Billing Page] Reactivation proration:', { reactivationPrice, allPlanPrices });
+
+    // For reactivation, return full price with no proration
+    return {
+      currentCycleDays: 0,
+      totalCycleDays: 0,
+      dailyRate: 0,
+      remainingBalance: 0,
+      newPlanDailyRate: reactivationPrice,
+      creditApplied: 0,
+      amountDue: reactivationPrice,
+      description: 'Full price for subscription reactivation'
+    };
   };
 
   // Calculate refund for cancellation modal
   const getCancellationRefund = (): { refundAmount: number; explanation: string } | null => {
     if (!currentSub) return null;
 
-    const planPrices: Record<string, number> = {
-      trial: 0,
-      basic: 1999,
-      premium: 19999,
-      enterprise: 0
-    };
+    // CRITICAL: Use plan prices from API response instead of hardcoded values
+    const allPlanPrices = (currentSub as any).allPlans?.reduce((acc: Record<string, number>, plan: any) => {
+      acc[plan.id] = plan.price || 0;
+      return acc;
+    }, {}) || {};
 
-    const currentPrice = planPrices[currentSub.subscription.planId as string] || 0;
+    const currentPrice = allPlanPrices[(currentSub as any).subscription.planId as string] || 0;
+
+    console.log('[Billing Page] Cancellation refund:', { currentPrice, allPlanPrices });
 
     return calculateCancellationRefund(
       currentPrice,
-      new Date(currentSub.subscription.currentPeriodStart as string),
-      new Date(currentSub.subscription.currentPeriodEnd as string)
+      new Date((currentSub as any).subscription.currentPeriodStart as string),
+      new Date((currentSub as any).subscription.currentPeriodEnd as string)
     );
   };
 
@@ -418,6 +584,7 @@ export default function SubscriptionPage() {
           onUpgrade={() => setActiveTab('manage')}
           onManage={() => setActiveTab('manage')}
           onCancel={() => setCancellationModal(true)}
+          onReactivate={() => handleReactivationClick((currentSub.subscription as Record<string, unknown>).planId as string)}
           theme={theme}
         />
 
@@ -483,10 +650,14 @@ export default function SubscriptionPage() {
                   <div className="rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
                     <p className="text-sm font-medium" style={{ color: `${theme.text}99` }}>Next Charge</p>
                     <p className="text-3xl font-bold mt-2" style={{ color: theme.text }}>
-                      {formatPrice((currentSub.subscription as Record<string, unknown>).nextPaymentAmount as number || currentSub.plan.price as number)}
+                      {(currentSub.subscription as Record<string, unknown>).status === 'cancelled'
+                        ? 'No upcoming charges'
+                        : formatPrice((currentSub.subscription as Record<string, unknown>).nextPaymentAmount as number || currentSub.plan.price as number)}
                     </p>
                     <p className="text-sm mt-2" style={{ color: `${theme.text}99` }}>
-                      {(currentSub.subscription as Record<string, unknown>).nextPaymentDate
+                      {(currentSub.subscription as Record<string, unknown>).status === 'cancelled'
+                        ? 'Subscription cancelled'
+                        : (currentSub.subscription as Record<string, unknown>).nextPaymentDate
                         ? `On ${formatDate((currentSub.subscription as Record<string, unknown>).nextPaymentDate as string)}`
                         : (currentSub.subscription as Record<string, unknown>).renewalDate
                         ? `On ${formatDate((currentSub.subscription as Record<string, unknown>).renewalDate as string)}`
@@ -511,29 +682,41 @@ export default function SubscriptionPage() {
                   </div>
                 </div>
 
-                {/* Auto-renew toggle */}
+                {/* Auto-renew toggle or cancellation status */}
                 <div className="mt-6 border-t pt-6" style={{ borderColor: `${theme.primary}20` }}>
-                  <div className="flex items-center justify-between">
+                  {(currentSub.subscription as Record<string, unknown>).status === 'cancelled' ? (
                     <div>
-                      <p className="font-medium" style={{ color: theme.text }}>Auto-renewal</p>
-                      <p className="text-sm mt-1" style={{ color: `${theme.text}99` }}>
-                        Your subscription will automatically renew on the renewal date
+                      <p className="font-medium" style={{ color: theme.text }}>Subscription Status</p>
+                      <p className="text-sm mt-1" style={{ color: '#ef4444' }}>
+                        Your subscription has been cancelled
+                      </p>
+                      <p className="text-sm mt-2" style={{ color: `${theme.text}99` }}>
+                        You can reactivate your subscription at any time using the button above
                       </p>
                     </div>
-                    <div className="flex items-center">
-                      <button
-                        onClick={handleAutoRenewToggle}
-                        disabled={autoRenewLoading}
-                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50"
-                        style={{ backgroundColor: autoRenewEnabled ? theme.primary : `${theme.text}30` }}
-                      >
-                        <span 
-                          className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                          style={{ transform: autoRenewEnabled ? 'translateX(1.25rem)' : 'translateX(0.25rem)' }}
-                        />
-                      </button>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium" style={{ color: theme.text }}>Auto-renewal</p>
+                        <p className="text-sm mt-1" style={{ color: `${theme.text}99` }}>
+                          Your subscription will automatically renew on the renewal date
+                        </p>
+                      </div>
+                      <div className="flex items-center">
+                        <button
+                          onClick={handleAutoRenewToggle}
+                          disabled={autoRenewLoading}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: autoRenewEnabled ? theme.primary : `${theme.text}30` }}
+                        >
+                          <span 
+                            className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                            style={{ transform: autoRenewEnabled ? 'translateX(1.25rem)' : 'translateX(0.25rem)' }}
+                          />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -541,8 +724,6 @@ export default function SubscriptionPage() {
 
           {activeTab === 'history' && (
             <div>
-              <h3 className="text-xl font-bold mb-4" style={{ color: theme.text }}>Invoice History</h3>
-
               {invoices.length === 0 ? (
                 <div className="rounded-lg p-8 text-center" style={{ backgroundColor: theme.surface }}>
                   <p style={{ color: `${theme.text}99` }}>No invoices yet</p>
@@ -594,11 +775,24 @@ export default function SubscriptionPage() {
 
           {activeTab === 'manage' && (
             <div className="space-y-6">
-              <h3 className="text-xl font-bold" style={{ color: theme.text }}>Plan Comparison</h3>
+              <div>
+                <h3 className="text-xl font-bold" style={{ color: theme.text }}>Plan Comparison</h3>
+                {(currentSub.subscription as Record<string, unknown>).status === 'cancelled' && (
+                  <div className="mt-4 p-4 rounded-lg border" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
+                    <p className="text-sm" style={{ color: '#dc2626' }}>
+                      <strong>Your subscription has been cancelled.</strong> Choose a plan below to reactivate your subscription. 
+                      You&apos;ll be charged the full amount for the selected plan.
+                    </p>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {plans.map((plan) => {
                   const isCurrent = plan.id === currentSub.subscription.planId;
+                  const isCancelled = (currentSub.subscription as Record<string, unknown>).status === 'cancelled';
+                  const wasCurrentPlan = isCurrent && isCancelled;
+                  
                   return (
                     <motion.div
                       key={plan.id}
@@ -606,8 +800,8 @@ export default function SubscriptionPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className="rounded-lg border-2 p-6 transition-all"
                       style={{
-                        borderColor: isCurrent ? theme.primary : `${theme.primary}20`,
-                        backgroundColor: isCurrent ? `${theme.primary}10` : theme.background,
+                        borderColor: isCurrent && !isCancelled ? theme.primary : `${theme.primary}20`,
+                        backgroundColor: isCurrent && !isCancelled ? `${theme.primary}10` : theme.background,
                       }}
                     >
                       {plan.isRecommended && (
@@ -650,9 +844,22 @@ export default function SubscriptionPage() {
                       </div>
 
                       <button
-                        disabled={isCurrent}
+                        disabled={isCurrent && !isCancelled}
                         onClick={() => {
-                          if (isCurrent) return;
+                          if (isCurrent && !isCancelled) return;
+                          
+                          // For cancelled subscriptions, any plan change is effectively reactivation
+                          if (isCancelled) {
+                            if (plan.id === currentSub.subscription.planId) {
+                              // Same plan reactivation
+                              handleReactivationClick(plan.id);
+                            } else {
+                              // Different plan - treat as upgrade for reactivation
+                              handleUpgradeClick(plan.id);
+                            }
+                            return;
+                          }
+
                           const planTiers = { trial: 0, basic: 1, premium: 2, enterprise: 3 };
                           const currentTier =
                             planTiers[
@@ -669,11 +876,13 @@ export default function SubscriptionPage() {
                         }}
                         className="w-full py-2 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-default"
                         style={{
-                          backgroundColor: isCurrent ? `${theme.text}20` : theme.primary,
-                          color: isCurrent ? theme.text : 'white',
+                          backgroundColor: (isCurrent && !isCancelled) ? `${theme.text}20` : theme.primary,
+                          color: (isCurrent && !isCancelled) ? theme.text : 'white',
                         }}
                       >
-                        {isCurrent ? 'Current Plan' : 'Upgrade'}
+                        {isCurrent && !isCancelled ? 'Current Plan' : 
+                         isCancelled ? (plan.id === currentSub.subscription.planId ? 'Reactivate' : 'Upgrade to Reactivate') : 
+                         'Upgrade'}
                       </button>
                     </motion.div>
                   );
@@ -705,17 +914,22 @@ export default function SubscriptionPage() {
         />
       )}
 
-      {currentSub && downgradeModal.planId && getDowngradeProration() && (
-        <DowngradeWarningModal
-          isOpen={downgradeModal.isOpen}
+      {currentSub && reactivationModal.planId && getReactivationProration() && (
+        <ReactivationFlowModal
+          isOpen={reactivationModal.isOpen}
+          subscriptionId={(currentSub.subscription as Record<string, unknown>).id as number}
           currentPlan={{
             name: currentPlan.name,
-            features: currentPlan.features
+            price: currentPlan.price ?? 0
           }}
-          newPlan={plans.find((p) => p.id === downgradeModal.planId) || plans[0]}
-          proration={getDowngradeProration()!}
-          onConfirm={handleDowngradeConfirm}
-          onCancel={() => setDowngradeModal({ isOpen: false })}
+          reactivationPlan={{
+            name: (plans.find((p) => p.id === reactivationModal.planId)?.name) || currentPlan.name,
+            price: (plans.find((p) => p.id === reactivationModal.planId)?.price) ?? currentPlan.price ?? 0,
+            features: (plans.find((p) => p.id === reactivationModal.planId)?.features) || currentPlan.features
+          }}
+          proration={getReactivationProration()!}
+          onConfirm={handleReactivationConfirm}
+          onCancel={() => setReactivationModal({ isOpen: false })}
           theme={theme}
         />
       )}
@@ -747,6 +961,352 @@ export default function SubscriptionPage() {
           theme={theme}
         />
       )}
+
+      {/* Payment Proof Modal */}
+      {paymentProofModal && upgradeRequest && (
+        <PaymentProofModal
+          isOpen={paymentProofModal}
+          upgradeRequest={upgradeRequest}
+          onSubmit={handleSubmitPaymentProof}
+          onCancel={() => setPaymentProofModal(false)}
+          theme={theme}
+        />
+      )}
+
+      {/* Cancel Upgrade Modal */}
+      {cancelUpgradeModal && upgradeRequest && (
+        <CancelUpgradeModal
+          isOpen={cancelUpgradeModal}
+          upgradeRequest={upgradeRequest}
+          onConfirm={handleCancelUpgrade}
+          onCancel={() => setCancelUpgradeModal(false)}
+          theme={theme}
+        />
+      )}
+    </div>
+  );
+}
+
+// Payment Proof Modal Component
+function PaymentProofModal({
+  isOpen,
+  upgradeRequest,
+  onSubmit,
+  onCancel,
+  theme
+}: {
+  isOpen: boolean;
+  upgradeRequest: UpgradeRequest;
+  onSubmit: (gcashTransactionId: string, paymentProof: File) => Promise<void>;
+  onCancel: () => void;
+  theme: any;
+}) {
+  const [gcashTransactionId, setGcashTransactionId] = useState('');
+  const [paymentProof, setPaymentProof] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gcashTransactionId.trim() || !paymentProof) {
+      setError('Please provide both GCash transaction ID and payment proof image.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError('');
+      await onSubmit(gcashTransactionId.trim(), paymentProof);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit payment proof');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setError('File size must be less than 5MB');
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file');
+        return;
+      }
+      setPaymentProof(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setError('');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden"
+        style={{ backgroundColor: theme.background }}
+      >
+        {/* Header with gradient background */}
+        <div 
+          className="px-6 py-8 bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+              💳
+            </div>
+            <h3 className="text-2xl font-bold">Payment Proof Submission</h3>
+          </div>
+          <p className="text-blue-100 text-sm mt-3">
+            Amount due: <span className="text-white font-bold text-lg">₱{(upgradeRequest.amountDue / 100).toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+          </p>
+        </div>
+
+        {/* Content */}
+        <form onSubmit={handleSubmit} className="px-6 py-8 space-y-6 max-h-[60vh] overflow-y-auto">
+          {/* Amount Summary Card */}
+          <div className="rounded-xl p-4 border-2" style={{ borderColor: `${theme.primary}20`, backgroundColor: `${theme.primary}08` }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: `${theme.text}99` }}>Payment for:</p>
+                <p className="text-lg font-bold mt-1" style={{ color: theme.text }}>
+                  {upgradeRequest.currentPlan} → {upgradeRequest.newPlan}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-semibold" style={{ color: `${theme.text}99` }}>Total Amount</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: theme.primary }}>
+                  ₱{(upgradeRequest.amountDue / 100).toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* GCash Transaction ID */}
+          <div>
+            <label className="block text-sm font-bold mb-3" style={{ color: theme.text }}>
+              GCash Transaction ID / Reference Number *
+            </label>
+            <input
+              type="text"
+              value={gcashTransactionId}
+              onChange={(e) => setGcashTransactionId(e.target.value)}
+              className="w-full px-4 py-3 border-2 rounded-lg transition-all focus:ring-2 focus:ring-offset-0 focus:border-transparent font-mono"
+              style={{
+                borderColor: gcashTransactionId ? theme.primary : '#e5e7eb',
+                backgroundColor: `${theme.primary}05`,
+                outlineColor: theme.primary
+              }}
+              placeholder="e.g., 123456789012345"
+              required
+            />
+            <p className="text-xs mt-2" style={{ color: `${theme.text}99` }}>
+              You can find this in your GCash app under transaction history or receipt
+            </p>
+          </div>
+
+          {/* Payment Proof Upload */}
+          <div>
+            <label className="block text-sm font-bold mb-3" style={{ color: theme.text }}>
+              Payment Proof Screenshot *
+            </label>
+            
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="sr-only"
+                id="proof-upload"
+                required
+              />
+              <label
+                htmlFor="proof-upload"
+                className={`block p-6 rounded-xl border-2 border-dashed cursor-pointer transition-all text-center ${
+                  paymentProof
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                }`}
+                style={{
+                  borderColor: paymentProof ? '#10b981' : `${theme.primary}40`,
+                  backgroundColor: paymentProof ? '#f0fdf4' : `${theme.primary}08`
+                }}
+              >
+                {preview ? (
+                  <div className="space-y-3">
+                    <div className="h-32 relative rounded-lg overflow-hidden bg-gray-100">
+                      <Image 
+                        src={preview} 
+                        alt="Payment proof preview" 
+                        width={200}
+                        height={128}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent flex items-center justify-center">
+                        <span className="text-white font-semibold">✓ Image selected</span>
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: '#10b981' }}>
+                      {paymentProof?.name || 'Image selected'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="font-semibold" style={{ color: theme.text }}>
+                      Click to upload or drag and drop
+                    </p>
+                    <p className="text-xs" style={{ color: `${theme.text}99` }}>
+                      PNG, JPG, GIF up to 5MB
+                    </p>
+                  </div>
+                )}
+              </label>
+            </div>
+          </div>
+
+          {/* Error Alert */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg p-4 bg-red-50 border border-red-200"
+            >
+              <p className="text-sm font-semibold text-red-600">{error}</p>
+            </motion.div>
+          )}
+
+          {/* Info Box */}
+          <div className="rounded-lg p-4" style={{ backgroundColor: `${theme.primary}08` }}>
+            <div>
+              <p className="text-sm font-semibold mb-2" style={{ color: theme.text }}>Please ensure your proof includes:</p>
+              <ul className="text-xs space-y-1" style={{ color: `${theme.text}99` }}>
+                <li>• GCash transaction reference number</li>
+                <li>• Amount sent</li>
+                <li>• Recipient details</li>
+                <li>• Timestamp of the transaction</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 justify-end pt-4 border-t" style={{ borderColor: `${theme.primary}20` }}>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="button"
+              onClick={onCancel}
+              className="px-6 py-2.5 rounded-lg font-semibold transition-all border-2"
+              style={{
+                borderColor: `${theme.text}20`,
+                color: theme.text,
+                backgroundColor: 'transparent'
+              }}
+            >
+              Cancel
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={submitting || !gcashTransactionId.trim() || !paymentProof}
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+            >
+              {submitting ? (
+                <span>Submitting...</span>
+              ) : (
+                <span>Submit Payment</span>
+              )}
+            </motion.button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+// Cancel Upgrade Modal Component
+function CancelUpgradeModal({
+  isOpen,
+  upgradeRequest,
+  onConfirm,
+  onCancel,
+  theme
+}: {
+  isOpen: boolean;
+  upgradeRequest: UpgradeRequest;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+  theme: any;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  const handleConfirm = async () => {
+    try {
+      setConfirming(true);
+      await onConfirm();
+    } catch (err) {
+      // Error is handled in the parent component
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" style={{ backgroundColor: theme.background }}>
+        <h3 className="text-xl font-bold mb-4" style={{ color: theme.text }}>Cancel Upgrade Request</h3>
+
+        <div className="mb-6">
+          <p className="text-gray-600 mb-4">
+            Are you sure you want to cancel your upgrade request from <strong>{upgradeRequest.currentPlan}</strong> to <strong>{upgradeRequest.newPlan}</strong>?
+          </p>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-800">
+                  This action cannot be undone. Your upgrade request will be permanently cancelled.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            Keep Request
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={confirming}
+            className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-lg hover:from-red-700 hover:to-rose-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {confirming ? 'Cancelling...' : 'Cancel Upgrade'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -48,13 +49,47 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Get pending upgrade/reactivation requests that don't have payments yet
+    const pendingRequests = await prisma.planUpgradeRequest.findMany({
+      where: {
+        status: 'pending',
+        paymentId: null, // Only requests without submitted payments
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        currentPlan: true,
+        newPlan: true,
+        amountDue: true,
+        prorationDetails: true,
+        requestedAt: true,
+        expiresAt: true,
+        tenant: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        subscription: {
+          select: {
+            id: true,
+            planId: true,
+            status: true
+          }
+        }
+      },
+      orderBy: { requestedAt: 'desc' },
+    });
+
     console.log(`[GET /api/admin/payments] Found ${payments.length} total payments`);
+    console.log(`[GET /api/admin/payments] Found ${pendingRequests.length} pending requests`);
 
     // Filter and map pending payments
     interface PaymentMetadata {
       gcashTransactionId?: string;
       submittedAt?: string;
       verificationStatus?: string;
+      planName?: string;
     }
     const pendingPayments = payments
       .filter((p) => {
@@ -69,33 +104,74 @@ export async function GET() {
         const metadata = p.metadata as PaymentMetadata;
         const submittedAt = metadata?.submittedAt ? new Date(metadata.submittedAt) : new Date();
         
-        // Map plan IDs to display names
-        const planNames: Record<string, string> = {
-          'trial': 'Trial',
-          'basic': 'BizCore Starter',
-          'premium': 'BizCore Premium',
-          'enterprise': 'Enterprise'
-        };
-        
-        // Use pending upgrade plan if it exists, otherwise use current plan
-        const planIdToShow = p.subscription.pendingUpgradePlanId || p.subscription.planId;
+        // Use planName from metadata if available, otherwise map from plan IDs
+        let planName = metadata?.planName;
+        if (!planName) {
+          const planNames: Record<string, string> = {
+            'trial': 'Free Trial',
+            'basic': 'Standard Monthly',
+            'premium': 'Standard Yearly',
+            'enterprise': 'Enterprise'
+          };
+          const planIdToShow = p.subscription.pendingUpgradePlanId || p.subscription.planId;
+          planName = planNames[planIdToShow] || planIdToShow;
+        }
         
         return {
           id: String(p.id),
           subscriptionId: String(p.subscriptionId),
-          planName: planNames[planIdToShow] || planIdToShow,
+          planName,
           amount: p.amount,
           currency: p.currency,
           gcashTransactionId: metadata?.gcashTransactionId,
           submittedAt: metadata?.submittedAt,
           expiresAt: new Date(submittedAt.getTime() + 24 * 60 * 60 * 1000),
           status: p.status,
+          type: 'payment' as const,
         };
       });
 
-    console.log(`[GET /api/admin/payments] Returning ${pendingPayments.length} pending payments`);
+    // Map pending upgrade/reactivation requests
+    const pendingRequestItems = pendingRequests.map((request) => {
+      // Determine if this is reactivation or upgrade based on proration details
+      const isReactivation = (request.prorationDetails as any)?.type === 'reactivation';
+      
+      // Get plan name
+      const planNames: Record<string, string> = {
+        'trial': 'Free Trial',
+        'basic': 'Standard Monthly',
+        'premium': 'Standard Yearly',
+        'enterprise': 'Enterprise'
+      };
+      const planName = planNames[request.newPlan] || request.newPlan;
+      
+      return {
+        id: `request-${request.id}`,
+        subscriptionId: String(request.subscription.id),
+        planName: isReactivation ? `${planName} (Reactivation)` : `${planName} (Upgrade)`,
+        amount: request.amountDue,
+        currency: 'PHP',
+        gcashTransactionId: null,
+        submittedAt: request.requestedAt.toISOString(),
+        expiresAt: request.expiresAt.toISOString(),
+        status: 'pending_request',
+        type: 'request' as const,
+        requestType: isReactivation ? 'reactivation' : 'upgrade',
+        requestId: request.id,
+      };
+    });
 
-    return NextResponse.json(pendingPayments);
+    // Combine and sort by submittedAt/requestedAt
+    const allPendingItems = [...pendingPayments, ...pendingRequestItems]
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
+    console.log(`[GET /api/admin/payments] Returning ${allPendingItems.length} pending items (${pendingPayments.length} payments, ${pendingRequestItems.length} requests)`);
+
+    return NextResponse.json(allPendingItems);
   } catch (error) {
     console.error('[GET /api/admin/payments] Error:', error);
     return NextResponse.json(
@@ -157,6 +233,9 @@ export async function PUT(request: NextRequest) {
             status: true, 
             planId: true,
             pendingUpgradePlanId: true,
+            billingCycle: true,
+            currentPeriodStart: true,
+            currentPeriodEnd: true,
             tenant: {
               select: { id: true, name: true }
             }
@@ -170,6 +249,27 @@ export async function PUT(request: NextRequest) {
         { error: 'Payment not found' },
         { status: 404 }
       );
+    }
+
+    console.log('[PUT /api/admin/payments] DIAGNOSTIC - Payment found:', {
+      paymentId: payment.id,
+      paymentStatus: payment.status,
+      subscriptionId: payment.subscriptionId,
+      currentPlanId: payment.subscription.planId,
+      pendingUpgradePlanId: payment.subscription.pendingUpgradePlanId,
+      subscriptionStatus: payment.subscription.status,
+      tenantName: payment.subscription.tenant.name,
+    });
+    
+    // CRITICAL DIAGNOSTIC: Check if pendingUpgradePlanId is null
+    if (!payment.subscription.pendingUpgradePlanId) {
+      console.warn('[PUT /api/admin/payments] ⚠️ WARNING: pendingUpgradePlanId is NULL or empty!', {
+        subscriptionId: payment.subscriptionId,
+        tenantName: payment.subscription.tenant.name,
+        currentPlanId: payment.subscription.planId,
+        paymentId: paymentIdInt,
+        paymentMetadata: payment.metadata,
+      });
     }
 
     if (!payment.subscription) {
@@ -202,27 +302,103 @@ export async function PUT(request: NextRequest) {
       });
 
       // Update subscription: apply pending upgrade plan and mark as active
-      // Get the new plan to determine billing cycle
-      let billingCycle = 'monthly'; // default
-      if (payment.subscription.pendingUpgradePlanId) {
-        const newPlan = await prisma.plan.findUnique({
-          where: { id: payment.subscription.pendingUpgradePlanId },
-          select: { billingCycle: true },
+      // CRITICAL: Check if there's actually a pending upgrade
+      if (!payment.subscription.pendingUpgradePlanId) {
+        console.warn('[PUT /api/admin/payments] WARNING: Payment approved but NO pending upgrade plan found!', {
+          paymentId: paymentIdInt,
+          subscriptionId: payment.subscriptionId,
+          currentPlanId: payment.subscription.planId,
+          pendingUpgradePlanId: payment.subscription.pendingUpgradePlanId,
         });
-        if (newPlan?.billingCycle) {
-          billingCycle = newPlan.billingCycle;
+      }
+
+      // Get the new plan to determine billing cycle
+      // IMPORTANT: Never set billingCycle to 'trial' during payment approval
+      // Trial is only for onboarding. Paid plans should be 'monthly' or 'annual'
+      let billingCycle = 'monthly'; // default
+
+      // CRITICAL: Determine intended upgrade plan ID. Prefer upgradeRequestId from payment metadata
+      // (used by the new flow), otherwise fall back to pendingUpgradePlanId (legacy flow).
+      const paymentMetadataAny: any = payment.metadata || {};
+      let upgradingPlanId: string | null = null;
+      let resolvedUpgradeRequestId: number | null = null;
+
+      if (paymentMetadataAny.upgradeRequestId) {
+        resolvedUpgradeRequestId = parseInt(String(paymentMetadataAny.upgradeRequestId), 10);
+        if (!isNaN(resolvedUpgradeRequestId)) {
+          // Fetch the upgrade request and resolve its newPlan field
+          const request = await prisma.planUpgradeRequest.findUnique({
+            where: { id: resolvedUpgradeRequestId },
+          });
+          if (request) {
+            upgradingPlanId = request.newPlan;
+          } else {
+            console.warn('[PUT /api/admin/payments] upgradeRequestId in metadata not found:', paymentMetadataAny.upgradeRequestId);
+          }
         }
       }
 
+      // Legacy fallback to subscription.pendingUpgradePlanId
+      if (!upgradingPlanId) {
+        upgradingPlanId = payment.subscription.pendingUpgradePlanId || null;
+      }
+
+      // Final fallback: look up plan by name from payment metadata
+      if (!upgradingPlanId && paymentMetadataAny.planName) {
+        console.log('[PUT /api/admin/payments] FALLBACK: Looking up plan by name:', paymentMetadataAny.planName);
+        const planByName = await prisma.plan.findUnique({
+          where: { name: paymentMetadataAny.planName },
+          select: { id: true, billingCycle: true },
+        });
+        if (planByName) {
+          upgradingPlanId = planByName.id;
+          // Update billing cycle from the found plan
+          if (planByName.billingCycle && planByName.billingCycle !== 'trial') {
+            billingCycle = planByName.billingCycle as 'monthly' | 'annual' | 'lifetime';
+          }
+          console.log('[PUT /api/admin/payments] FOUND plan by name:', upgradingPlanId, 'billingCycle:', billingCycle);
+        } else {
+          console.warn('[PUT /api/admin/payments] Plan not found by name:', paymentMetadataAny.planName);
+        }
+      }
+
+      // Ultimate fallback: use planId directly from metadata
+      if (!upgradingPlanId && paymentMetadataAny.planId) {
+        console.log('[PUT /api/admin/payments] ULTIMATE FALLBACK: Using planId from metadata:', paymentMetadataAny.planId);
+        upgradingPlanId = paymentMetadataAny.planId;
+        // Get billing cycle for this plan
+        const planData = await prisma.plan.findUnique({
+          where: { id: paymentMetadataAny.planId },
+          select: { billingCycle: true },
+        });
+        if (planData?.billingCycle && planData.billingCycle !== 'trial') {
+          billingCycle = planData.billingCycle as 'monthly' | 'annual' | 'lifetime';
+        }
+      }
+
+      // If upgradingPlanId was found via pendingUpgradePlanId, get its billing cycle
+      if (upgradingPlanId && !paymentMetadataAny.planName) {
+        const upgradePlan = await prisma.plan.findUnique({
+          where: { id: upgradingPlanId },
+          select: { billingCycle: true },
+        });
+        if (upgradePlan?.billingCycle && upgradePlan.billingCycle !== 'trial') {
+          billingCycle = upgradePlan.billingCycle as 'monthly' | 'annual' | 'lifetime';
+        }
+      }
+      
       const subscriptionUpdate: Record<string, unknown> = {
         status: 'active',
         pendingUpgradePlanId: null,
       };
 
       // If there's a pending upgrade plan, apply it and reset billing cycle
-      if (payment.subscription.pendingUpgradePlanId) {
-        subscriptionUpdate.planId = payment.subscription.pendingUpgradePlanId;
+      if (upgradingPlanId) {
+        subscriptionUpdate.planId = upgradingPlanId;
         subscriptionUpdate.planChangedAt = new Date();
+        
+        // Update billing cycle to match the new plan (CRITICAL: must not be 'trial')
+        subscriptionUpdate.billingCycle = billingCycle as any; // billingCycle was fetched above
         
         // Reset billing cycle to start fresh after upgrade
         const cycleStart = new Date();
@@ -237,16 +413,92 @@ export async function PUT(request: NextRequest) {
           subscriptionUpdate.renewalDate = new Date(cycleStart.getTime() + 30 * 24 * 60 * 60 * 1000);
           subscriptionUpdate.nextPaymentDate = new Date(cycleStart.getTime() + 30 * 24 * 60 * 60 * 1000);
         }
+
+        console.log('[PUT /api/admin/payments] UPGRADE - Intending to set planId to:', upgradingPlanId, ', upgradeRequestId:', resolvedUpgradeRequestId);
       } else {
         // No upgrade, just mark as active and set next payment date
         subscriptionUpdate.nextPaymentDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        console.log('[PUT /api/admin/payments] NO UPGRADE - planId remains:', payment.subscription.planId);
       }
+
+      console.log('[PUT /api/admin/payments] Subscription update object:', {
+        planId: subscriptionUpdate.planId,
+        billingCycle: subscriptionUpdate.billingCycle,
+        status: subscriptionUpdate.status,
+        pendingUpgradePlanId: subscriptionUpdate.pendingUpgradePlanId,
+        currentPeriodEnd: subscriptionUpdate.currentPeriodEnd,
+      });
 
       const updatedSubscription = await prisma.subscription.update({
         where: { id: payment.subscriptionId },
         data: subscriptionUpdate,
         include: { tenant: true },
       });
+
+      // VERIFY the update worked - CRITICAL CHECK
+      console.log('[PUT /api/admin/payments] AFTER UPDATE - subscription:', {
+        id: updatedSubscription.id,
+        planId: updatedSubscription.planId,
+        status: updatedSubscription.status,
+        pendingUpgradePlanId: updatedSubscription.pendingUpgradePlanId,
+      });
+
+      // CRITICAL ASSERTION: If we were upgrading, planId MUST have changed
+      if (upgradingPlanId && updatedSubscription.planId !== upgradingPlanId) {
+        console.error('[PUT /api/admin/payments] ❌ CRITICAL ERROR: planId was NOT updated!', {
+          expected: upgradingPlanId,
+          actual: updatedSubscription.planId,
+          subscriptionId: payment.subscriptionId,
+          updateData: subscriptionUpdate,
+        });
+        // This is a critical bug - log it but continue to send email with correct plan
+      } else if (upgradingPlanId) {
+        console.log('[PUT /api/admin/payments] ✅ SUCCESS: planId correctly updated to:', upgradingPlanId);
+      }
+
+      console.log('[PUT /api/admin/payments] Updated subscription:', {
+        id: updatedSubscription.id,
+        planId: updatedSubscription.planId,
+        billingCycle: updatedSubscription.billingCycle,
+        status: updatedSubscription.status,
+        pendingUpgradePlanId: updatedSubscription.pendingUpgradePlanId,
+      });
+
+      // If we applied an upgrade and we have a resolved upgrade request, mark it as applied
+      if (resolvedUpgradeRequestId) {
+        try {
+          await prisma.planUpgradeRequest.update({
+            where: { id: resolvedUpgradeRequestId },
+            data: {
+              status: 'applied',
+              approvedAt: new Date(),
+              appliedAt: new Date(),
+              approvedBy: parseInt(session.user.id || '0', 10),
+            },
+          });
+        } catch (e) {
+          console.error('[PUT /api/admin/payments] Failed to update planUpgradeRequest status:', e);
+        }
+      }
+
+      // Sync Tenant.subscriptionPlan based on planId applied
+      try {
+        if (updatedSubscription.planId && updatedSubscription.tenant) {
+          // Map plan ids to tenant subscription plan enum
+          const mapPlanToTenantPlan = (planId: string) => {
+            if (planId === 'trial') return 'free';
+            if (['free', 'basic', 'premium', 'enterprise'].includes(planId)) return planId as any;
+            // fallback
+            return 'free' as any;
+          };
+
+          const tenantPlanVal = mapPlanToTenantPlan(updatedSubscription.planId);
+          await prisma.tenant.update({ where: { id: updatedSubscription.tenant.id }, data: { subscriptionPlan: tenantPlanVal } });
+          console.log('[PUT /api/admin/payments] Tenant.subscriptionPlan synced to:', tenantPlanVal, 'for tenantId', updatedSubscription.tenant.id);
+        }
+      } catch (e) {
+        console.error('[PUT /api/admin/payments] Failed to sync tenant.subscriptionPlan:', e);
+      }
 
       // Send verification email to tenant and admin notification
       try {
@@ -257,14 +509,37 @@ export async function PUT(request: NextRequest) {
 
         if (subscriber?.email) {
           const recipientName = `${subscriber.firstName || ''} ${subscriber.lastName || ''}`.trim() || 'Customer';
-          // Use the updated planId (which could be the pending upgrade plan)
-          const planName = updatedSubscription.planId?.charAt(0).toUpperCase() + updatedSubscription.planId?.slice(1) || 'Premium';
+          
+          // CRITICAL: Determine which plan to show in the email
+          // Priority: 1) Updated subscription planId, 2) Fallback to upgradingPlanId (what we intended to upgrade to)
+          let planIdToFetch = updatedSubscription.planId;
+          let planSource = 'updated subscription';
+          
+          if (!planIdToFetch && upgradingPlanId) {
+            planIdToFetch = upgradingPlanId;
+            planSource = 'FALLBACK to upgradingPlanId';
+            console.warn('[PUT /api/admin/payments] ⚠️ Using FALLBACK planId:', upgradingPlanId);
+          }
+          
+          let planNameToSend = 'Premium'; // fallback
+          
+          console.log('[PUT /api/admin/payments] TENANT EMAIL - Using planId:', planIdToFetch, 'from', planSource);
+          
+          // Fetch the plan name
+          const planData = await prisma.plan.findUnique({
+            where: { id: planIdToFetch },
+            select: { name: true },
+          });
+          planNameToSend = planData?.name || planNameToSend;
+          
+          console.log('[PUT /api/admin/payments] TENANT EMAIL - Plan name:', planNameToSend);
+          
           try {
             await sendTenantPaymentApprovedEmail(
               subscriber.email,
               recipientName,
               updatedSubscription.tenant.name,
-              planName,
+              planNameToSend,
               payment.amount,
               payment.currency || 'PHP'
             );
@@ -273,12 +548,27 @@ export async function PUT(request: NextRequest) {
           }
         }
 
-        // Send admin notification email
-        const planName = updatedSubscription.planId?.charAt(0).toUpperCase() + updatedSubscription.planId?.slice(1) || 'Premium';
+        // Send admin notification email - use the same plan name
+        let planNameToSend = 'Premium'; // fallback
+        let planIdToFetch = updatedSubscription.planId;
+        
+        if (!planIdToFetch && upgradingPlanId) {
+          planIdToFetch = upgradingPlanId;
+          console.warn('[PUT /api/admin/payments] ADMIN EMAIL: Using FALLBACK planId:', upgradingPlanId);
+        }
+        
+        const planData = await prisma.plan.findUnique({
+          where: { id: planIdToFetch },
+          select: { name: true },
+        });
+        planNameToSend = planData?.name || planNameToSend;
+        
+        console.log('[PUT /api/admin/payments] ADMIN EMAIL - Using planId:', planIdToFetch, 'Plan name:', planNameToSend);
+        
         try {
           await sendAdminPaymentVerifiedEmail(
             updatedSubscription.tenant.name,
-            planName,
+            planNameToSend,
             payment.amount,
             payment.currency || 'PHP',
             adminNotes || 'Payment verified'

@@ -15,6 +15,7 @@ import {
   ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import { formatActivityDetails } from '@/lib/activityFormatter'
+import { useRecentItems } from '@/hooks/useRecentItems'
 
 interface Tenant {
   id: number
@@ -89,6 +90,9 @@ export default function TenantDetailPage() {
   const [activityTotal, setActivityTotal] = useState(0)
   const [activityTotalPages, setActivityTotalPages] = useState(1)
 
+  // Recent items tracking
+  const { addRecentItem } = useRecentItems()
+
   // Edit state
   const [editMode, setEditMode] = useState(false)
   const [editData, setEditData] = useState<Partial<Tenant> | null>(null)
@@ -111,6 +115,15 @@ export default function TenantDetailPage() {
         const data = await res.json()
         setTenant(data)
         setEditData(data)
+        
+        // Track as recent item
+        addRecentItem({
+          id: data.id,
+          type: 'tenant',
+          title: data.name,
+          subtitle: data.subdomain,
+          url: `/admin/tenants/${data.id}`,
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
@@ -119,7 +132,7 @@ export default function TenantDetailPage() {
     }
 
     fetchTenant()
-  }, [id])
+  }, [id, addRecentItem])
 
   // Fetch activity logs
   useEffect(() => {

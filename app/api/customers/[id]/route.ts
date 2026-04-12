@@ -83,34 +83,55 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+    let session = await getServerSession(authOptions)
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
+    const customerId = parseInt(id, 10)
     const body = await request.json()
     const { firstName, lastName, phone } = body
 
-    // Verify user owns this customer record
-    const customer = await prisma.customer.findFirst({
-      where: { id: parseInt(id), email: session.user.email }
-    })
+    let customer
+    if (session.user.id) {
+      // Customer session - verify owns account
+      customer = await prisma.customer.findUnique({
+        where: { id: customerId }
+      })
+      if (!customer || parseInt(session.user.id) !== customerId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    } else {
+      // Admin session - find by email
+      customer = await prisma.customer.findFirst({
+        where: { id: customerId, email: session.user.email }
+      })
+    }
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     }
 
     const updated = await prisma.customer.update({
-      where: { id: parseInt(id) },
+      where: { id: customerId },
       data: {
-        firstName: firstName || customer.firstName,
-        lastName: lastName || customer.lastName,
-        phone: phone !== undefined ? phone : customer.phone
+        ...(firstName !== undefined && { firstName }),
+        ...(lastName !== undefined && { lastName }),
+        ...(phone !== undefined && { phone })
       }
     })
 
-    return NextResponse.json({ success: true, customer: updated })
+    return NextResponse.json({
+      success: true,
+      customer: {
+        id: updated.id,
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        email: updated.email,
+        phone: updated.phone
+      }
+    })
   } catch (error) {
     console.error('Error updating customer:', error)
     return NextResponse.json({ error: 'Failed to update customer' }, { status: 500 })

@@ -67,10 +67,37 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // POS routes require authentication and employee role
+  if (pathname.startsWith('/pos')) {
+    // Allow /pos/login for unauthenticated access
+    if (pathname.match(/^\/pos\/[^\/]+\/login$/)) {
+      const response = NextResponse.next()
+      return addSecurityHeaders(response, request)
+    }
+
+    // All other /pos routes require authentication
+    if (!token) {
+      // Extract subdomain from pathname (e.g., /pos/tenant-name/... -> tenant-name)
+      const subdomainMatch = pathname.match(/^\/pos\/([^\/]+)/)
+      const subdomain = subdomainMatch ? subdomainMatch[1] : 'default'
+      return NextResponse.redirect(new URL(`/pos/${subdomain}/login`, request.url))
+    }
+    
+    // Only POS employees (and admins) can access POS routes
+    const userType = (token as { userType?: string }).userType
+    const isPosEmployee = userType === 'pos_employee'
+    const isAdmin = token.role === 'admin'
+    
+    if (!isPosEmployee && !isAdmin) {
+      // Redirect non-POS users away from POS routes
+      return NextResponse.redirect(new URL('/auth/signin', request.url))
+    }
+  }
+
   const response = NextResponse.next()
   return addSecurityHeaders(response, request)
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/pos/:path*'],
 }

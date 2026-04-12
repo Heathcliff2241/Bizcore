@@ -55,6 +55,8 @@ export async function GET(request: NextRequest) {
               gte: startDate,
               lte: now,
             },
+            paymentStatus: 'paid',
+            status: { in: ['completed', 'delivered'] }
           },
         }),
         prisma.order.aggregate({
@@ -63,6 +65,8 @@ export async function GET(request: NextRequest) {
               gte: startDate,
               lte: now,
             },
+            paymentStatus: 'paid',
+            status: { in: ['completed', 'delivered'] }
           },
           _sum: {
             total: true,

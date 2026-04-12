@@ -29,6 +29,7 @@ interface SubscriptionHeroProps {
   onUpgrade?: () => void;
   onManage?: () => void;
   onCancel?: () => void;
+  onReactivate?: () => void;
   theme?: Theme;
 }
 
@@ -45,6 +46,7 @@ export default function SubscriptionHero({
   onUpgrade,
   onManage,
   onCancel,
+  onReactivate,
   theme = {
     primary: '#3B82F6',
     secondary: '#10B981',
@@ -56,6 +58,7 @@ export default function SubscriptionHero({
 }: SubscriptionHeroProps) {
   const isActive = subscription.status === 'active' || subscription.status === 'trial';
   const isTrial = subscription.status === 'trial';
+  const isCancelled = subscription.status === 'cancelled';
   const [countdown, setCountdown] = useState<CountdownState>({
     days: subscription.daysRemaining || 0,
     hours: 0,
@@ -88,12 +91,12 @@ export default function SubscriptionHero({
     return () => clearInterval(interval);
   }, [isTrial, subscription.renewalDate]);
 
-  const formatPrice = (cents: number) => {
+  const formatPrice = (pesos: number) => {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
       minimumFractionDigits: 0,
-    }).format(cents / 100);
+    }).format(pesos);
   };
 
   const formatDate = (date: string) => {
@@ -232,6 +235,18 @@ export default function SubscriptionHero({
             >
               View Billing
             </motion.button>
+
+            {isCancelled && onReactivate && (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={onReactivate}
+                className="w-full text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-all"
+                style={{ backgroundColor: theme.primary }}
+              >
+                Reactivate Subscription
+              </motion.button>
+            )}
 
             {isActive && (
               <motion.button

@@ -2,33 +2,39 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useSession, signIn } from 'next-auth/react'
 import { motion } from 'framer-motion'
+import Link from 'next/link'
 
 export default function POSLoginPage() {
   const params = useParams()
   const router = useRouter()
+  const { data: session, status } = useSession()
   const subdomain = params.subdomain as string
 
-  const [loginMode, setLoginMode] = useState<'password' | 'pin'>('pin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [pin, setPin] = useState('')
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [storeName, setStoreName] = useState('')
+  const [showOtpStep, setShowOtpStep] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+  const [usePin, setUsePin] = useState(false)
 
+  // Redirect to POS page if already logged in
   useEffect(() => {
-    // Check if user is already logged in
-    const posToken = localStorage.getItem('pos_token')
-    const posEmployee = localStorage.getItem('pos_employee')
-
-    if (posToken && posEmployee) {
-      // Already logged in, redirect to dashboard
-      router.push(`/pos/${subdomain}`)
-      return
+    if (status === 'authenticated' && session?.user) {
+      const userType = (session.user as any).userType
+      if (userType === 'pos_employee') {
+        router.push(`/pos/${subdomain}`)
+      }
     }
+  }, [session, status, subdomain, router])
 
-    // Fetch store name
+  // Fetch store name
+  useEffect(() => {
     fetch(`/api/tenant/${subdomain}`)
       .then(res => res.json())
       .then(data => {
@@ -37,7 +43,7 @@ export default function POSLoginPage() {
         }
       })
       .catch(() => {})
-  }, [subdomain, router])
+  }, [subdomain])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,32 +51,25 @@ export default function POSLoginPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/pos/auth/login', {
+      // Request OTP from the API
+      const res = await fetch('/api/pos/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subdomain,
           email,
-          password: loginMode === 'password' ? password : undefined,
-          pin: loginMode === 'pin' ? pin : undefined
+          password: usePin ? undefined : password,
+          pin: usePin ? pin : undefined
         })
       })
 
       const data = await res.json()
 
       if (res.ok) {
-        // Store token in localStorage
-        localStorage.setItem('pos_token', data.token)
-        localStorage.setItem('pos_employee', JSON.stringify(data.employee))
-        localStorage.setItem('pos_tenant', JSON.stringify(data.tenant))
-        
-        // Store settings (including tax)
-        if (data.settings) {
-          localStorage.setItem('pos_settings', JSON.stringify(data.settings))
-        }
-
-        // Redirect to POS
-        router.push(`/pos/${subdomain}`)
+        // Save email and show OTP step
+        setUserEmail(email)
+        setShowOtpStep(true)
+        setOtp('')
       } else {
         setError(data.error || 'Login failed')
       }
@@ -81,9 +80,32 @@ export default function POSLoginPage() {
     }
   }
 
-  const handlePinInput = (value: string) => {
-    if (value.length <= 6 && /^\d*$/.test(value)) {
-      setPin(value)
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      // Use NextAuth signIn with pos-employee-otp provider
+      // Use redirect: false so we can explicitly redirect to the correct POS page
+      const result = await signIn('pos-employee-otp', {
+        email: userEmail,
+        otp,
+        subdomain,
+        redirect: false
+      })
+
+      if (result?.error) {
+        setError(result.error || 'OTP verification failed')
+        setLoading(false)
+      } else if (result?.ok) {
+        // Manually redirect to POS page after successful authentication
+        router.push(`/pos/${subdomain}`)
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.')
+      console.error(err)
+      setLoading(false)
     }
   }
 
@@ -141,106 +163,160 @@ export default function POSLoginPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
             >
-              {/* Login Mode Toggle */}
-              <div className="flex rounded-lg bg-blue-50 p-1 mb-6 border border-blue-200">
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('pin')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all duration-200 ${
-                    loginMode === 'pin'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg'
-                      : 'text-blue-700 hover:text-blue-900'
-                  }`}
-                >
-                  PIN Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('password')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all duration-200 ${
-                    loginMode === 'password'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg'
-                      : 'text-blue-700 hover:text-blue-900'
-                  }`}
-                >
-                  Password Login
-                </button>
-              </div>
+              {showOtpStep ? (
+                <form className="space-y-5" onSubmit={handleVerifyOtp}>
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
+                    >
+                      {error}
+                    </motion.div>
+                  )}
 
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
-                  >
-                    {error}
-                  </motion.div>
-                )}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+                    <p className="text-blue-900 font-medium">Verification Code Sent</p>
+                    <p className="text-blue-700 mt-1">Enter the 6-digit code sent to {userEmail}</p>
+                  </div>
 
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={inputClasses}
-                    placeholder="Email Address"
-                  />
-                </motion.div>
-
-                {loginMode === 'pin' ? (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
+                    transition={{ delay: 0.1 }}
                   >
                     <input
-                      type="password"
-                      inputMode="numeric"
-                      required
-                      value={pin}
-                      onChange={(e) => handlePinInput(e.target.value)}
-                      className={`${inputClasses} text-center text-2xl tracking-widest`}
-                      placeholder="••••"
+                      id="otp"
+                      name="otp"
+                      type="text"
                       maxLength={6}
-                    />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                  >
-                    <input
-                      type="password"
                       required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
                       className={inputClasses}
-                      placeholder="Password"
+                      placeholder="000000"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                     />
                   </motion.div>
-                )}
 
-                <motion.button
-                  type="submit"
-                  disabled={loading}
-                  whileTap={{ scale: 0.97 }}
-                  whileHover={{ scale: 1.02 }}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
-                >
-                  {loading ? 'Logging in...' : 'Login to POS'}
-                </motion.button>
-              </form>
+                  <motion.button
+                    type="submit"
+                    disabled={loading || otp.length !== 6}
+                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.02 }}
+                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
+                  >
+                    {loading ? 'Verifying...' : 'Verify Code'}
+                  </motion.button>
 
-              <div className="mt-6 text-center text-sm text-blue-700">
-                <p>Need help? Contact your manager</p>
-              </div>
+                  <motion.button
+                    type="button"
+                    onClick={() => {
+                      setShowOtpStep(false)
+                      setOtp('')
+                      setUserEmail('')
+                      setError('')
+                    }}
+                    className="w-full py-2 text-blue-600 text-sm font-semibold hover:underline"
+                  >
+                    Back to Login
+                  </motion.button>
+                </form>
+              ) : (
+                <>
+                  <form onSubmit={handleSubmit} className="space-y-5">
+                    {error && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
+                      >
+                        {error}
+                      </motion.div>
+                    )}
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <label className="block text-sm font-medium text-blue-900 mb-2">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={inputClasses}
+                        placeholder="your@email.com"
+                      />
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsePin(!usePin)
+                            setPassword('')
+                            setPin('')
+                          }}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Use {usePin ? 'Password' : 'PIN'} instead
+                        </button>
+                      </div>
+                      {usePin ? (
+                        <div>
+                          <label className="block text-sm font-medium text-blue-900 mb-2">
+                            PIN
+                          </label>
+                          <input
+                            type="password"
+                            required
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            className={inputClasses}
+                            placeholder="Enter your PIN"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-sm font-medium text-blue-900 mb-2">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className={inputClasses}
+                            placeholder="Enter your password"
+                          />
+                        </div>
+                      )}
+                    </motion.div>
+
+                    <motion.button
+                      type="submit"
+                      disabled={loading || !email || (!usePin ? !password : !pin)}
+                      whileTap={{ scale: 0.97 }}
+                      whileHover={{ scale: 1.02 }}
+                      className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
+                    >
+                      {loading ? 'Sending code...' : 'Send Verification Code'}
+                    </motion.button>
+                  </form>
+
+                  <div className="mt-6 text-center text-sm text-blue-700">
+                    <p>A verification code will be sent to your email</p>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         </div>

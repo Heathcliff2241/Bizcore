@@ -13,7 +13,10 @@ import {
   XMarkIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
+  ArrowDownTrayIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline'
+import { exportFromAPI } from '@/lib/csv-export'
 
 interface Tenant {
   id: number
@@ -84,6 +87,7 @@ export default function TenantsPage() {
   })
   const [warningForm, setWarningForm] = useState({ reason: '', message: '' })
   const [sendingWarning, setSendingWarning] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const fetchTenants = async () => {
     setLoading(true)
@@ -220,6 +224,32 @@ export default function TenantsPage() {
     setWarningForm({ reason: '', message: '' })
   }
 
+  const handleExportCSV = async () => {
+    setExporting(true)
+    try {
+      // Build query params with current filters
+      const params = new URLSearchParams({
+        ...(search && { search }),
+        ...(planFilter !== 'all' && { plan: planFilter }),
+        ...(statusFilter !== 'all' && { status: statusFilter }),
+      })
+
+      const result = await exportFromAPI(
+        `/api/admin/export/tenants?${params}`,
+        `tenants_export_${new Date().toISOString().split('T')[0]}`
+      )
+
+      if (!result.success) {
+        alert(result.error || 'Failed to export tenants')
+      }
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export tenants')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const handleSearch = (value: string) => {
     setSearch(value)
     setPage(1)
@@ -271,6 +301,23 @@ export default function TenantsPage() {
         <div>
           <h2 className="text-3xl font-bold text-blue-900">Tenants</h2>
           <p className="text-blue-700 mt-1">Manage all business accounts</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExportCSV}
+            disabled={exporting || tenants.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            <ArrowDownTrayIcon className="w-5 h-5" />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => router.push('/admin/tenants/new')}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Create New Tenant
+          </button>
         </div>
       </motion.div>
 

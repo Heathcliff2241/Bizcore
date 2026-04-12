@@ -5,22 +5,21 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname, useParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { ChevronLeft, ChevronRight, LogOut, LayoutDashboard, ShoppingCart, Package, Users, UserCog, Palette, Settings, ExternalLink, Tag, BarChart3, CreditCard as CreditCardIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, LayoutDashboard, ShoppingCart, Package, Users, Palette, Settings, ExternalLink, BarChart3, CreditCard as CreditCardIcon, Bell as BellIcon } from 'lucide-react'
 import { ThemeProvider, useTheme } from '../theme-context'
 import { SettingsProvider } from '@/lib/settings-context'
 import { getBrandStudioIframeUrl } from '@/lib/getAppUrl'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
 
 const links = [
   { name: 'Overview', pattern: '/dashboard/[subdomain]' as const, icon: LayoutDashboard },
   { name: 'Orders', pattern: '/dashboard/[subdomain]/orders' as const, icon: ShoppingCart },
-  { name: 'Inventory', pattern: '/dashboard/[subdomain]/inventory' as const, icon: Package },
-  { name: 'Products', pattern: '/dashboard/[subdomain]/products' as const, icon: Package },
-  { name: 'Categories', pattern: '/dashboard/[subdomain]/categories' as const, icon: Tag },
-  { name: 'Customers', pattern: '/dashboard/[subdomain]/customers' as const, icon: Users },
-  { name: 'Employees', pattern: '/dashboard/[subdomain]/employees' as const, icon: UserCog },
+  { name: 'Catalog', pattern: '/dashboard/[subdomain]/catalog' as const, icon: Package },
+  { name: 'People', pattern: '/dashboard/[subdomain]/people' as const, icon: Users },
   { name: 'Analytics', pattern: '/dashboard/[subdomain]/analytics' as const, icon: BarChart3 },
-  { name: 'Brand Studio', path: '/brandstudio', icon: Palette, external: true },
+  // { name: 'Brand Studio', path: '/brandstudio', icon: Palette, external: true },
   { name: 'Billing & Subscriptions', pattern: '/dashboard/[subdomain]/billing/subscriptions' as const, icon: CreditCardIcon },
+  { name: 'Notifications', pattern: '/dashboard/[subdomain]/notifications' as const, icon: BellIcon },
   { name: 'Settings', pattern: '/dashboard/[subdomain]/settings' as const, icon: Settings }
 ]
 
@@ -29,13 +28,41 @@ function DashboardLayoutContent({
 }: {
   children: React.ReactNode
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    // Load from localStorage, default to false for mobile-first
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('dashboard_sidebar_open')
+      return stored ? JSON.parse(stored) : false
+    }
+    return false
+  })
+  const [isMobile, setIsMobile] = useState(false)
   const [tenantName, setTenantName] = useState<string>('')
   const [showBrandStudioDialog, setShowBrandStudioDialog] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const params = useParams()
   const { theme } = useTheme()
+
+  // Save sidebar state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('dashboard_sidebar_open', JSON.stringify(sidebarOpen))
+  }, [sidebarOpen])
+
+  // Check if mobile on mount and window resize
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 1024 // lg breakpoint
+      setIsMobile(mobile)
+      if (!mobile && sidebarOpen === null) {
+        setSidebarOpen(true) // Auto-open on desktop only if not previously set
+      }
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [sidebarOpen])
 
   useEffect(() => {
     // Get tenant name from localStorage or params
@@ -159,11 +186,39 @@ function DashboardLayoutContent({
 
   return (
         <div className="flex h-screen" style={{ backgroundColor: theme.background || '#f9fafb' }}>
+          {/* Mobile Overlay Backdrop */}
+          {isMobile && sidebarOpen && (
+            <div
+              onClick={() => setSidebarOpen(false)}
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300"
+            />
+          )}
+
+          {/* Mobile Menu Button */}
+          {isMobile && !sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 p-2.5 sm:p-3 rounded-xl shadow-lg transition-all duration-200 lg:hidden touch-manipulation"
+              style={{
+                backgroundColor: 'white',
+                color: theme.primary,
+                border: `2px solid ${theme.primary}20`,
+              }}
+              aria-label="Open menu"
+            >
+              <ChevronRight size={20} className="sm:w-6 sm:h-6" />
+            </button>
+          )}
+
           {/* Sidebar */}
           <aside
-            className={`bg-white border-r transition-all duration-300 flex flex-col h-screen fixed inset-y-0 left-0 z-40 ${
-              sidebarOpen ? 'w-64 p-4' : 'w-20 p-2'
-            }`}
+            className={`bg-white border-r transition-all duration-300 flex flex-col h-screen fixed inset-y-0 left-0 ${
+              isMobile ? 'z-50' : 'z-40'
+            } ${
+              isMobile 
+                ? (sidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full')
+                : (sidebarOpen ? 'w-64 p-4' : 'w-20 p-2')
+            } ${sidebarOpen ? 'p-4' : isMobile ? 'p-4' : 'p-2'}`}
             style={{ 
               borderRightColor: theme.surface || '#f3f4f6',
               boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.02), 0 1px 3px 0 rgba(0, 0, 0, 0.04)'
@@ -245,9 +300,12 @@ function DashboardLayoutContent({
                       ) : (
                         <Link
                           href={href}
+                          onClick={() => {
+                            if (isMobile) setSidebarOpen(false)
+                          }}
                           title={!sidebarOpen ? link.name : ''}
                           className={`flex items-center px-3.5 py-2.5 rounded-lg transition-all duration-200 font-medium ${
-                            !sidebarOpen && 'justify-center'
+                            !sidebarOpen && !isMobile && 'justify-center'
                           }`}
                           style={{
                             backgroundColor: isActive ? `${theme.primary}15` : 'transparent',
@@ -294,35 +352,47 @@ function DashboardLayoutContent({
                 {sidebarOpen && <span className="ml-3 text-sm">Logout</span>}
               </button>
 
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className={`w-full flex items-center px-3.5 py-2.5 rounded-lg transition-all duration-200 font-medium ${
-                  !sidebarOpen && 'justify-center'
-                }`}
-                title={sidebarOpen ? 'Collapse' : 'Expand'}
-                style={{ color: theme.text || '#374151' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = `${theme.primary}08`
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                }}
-              >
-                {sidebarOpen ? (
-                  <>
-                    <ChevronLeft size={20} />
-                    <span className="ml-3 text-sm">Collapse</span>
-                  </>
-                ) : (
-                  <ChevronRight size={20} />
-                )}
-              </button>
+              {!isMobile && (
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className={`w-full flex items-center px-3.5 py-2.5 rounded-lg transition-all duration-200 font-medium ${
+                    !sidebarOpen && 'justify-center'
+                  }`}
+                  title={sidebarOpen ? 'Collapse' : 'Expand'}
+                  style={{ color: theme.text || '#374151' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = `${theme.primary}08`
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent'
+                  }}
+                >
+                  {sidebarOpen ? (
+                    <>
+                      <ChevronLeft size={20} />
+                      <span className="ml-3 text-sm">Collapse</span>
+                    </>
+                  ) : (
+                    <ChevronRight size={20} />
+                  )}
+                </button>
+              )}
             </div>
           </aside>
 
           {/* Main content */}
-          <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
-            {children}
+          <div className={`flex-1 transition-all duration-300 flex flex-col ${
+            isMobile ? (sidebarOpen ? 'ml-0' : 'ml-0') : (sidebarOpen ? 'ml-64' : 'ml-20')
+          } ${isMobile ? 'pt-16 sm:pt-20' : ''}`}>
+            {/* Page Content */}
+            <div className="flex-1 overflow-auto w-full">
+              {children}
+            </div>
+          </div>
+
+          {/* Floating Notification Bell */}
+          <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-50">
+            <NotificationBell theme={theme} />
           </div>
 
           {/* BrandStudio Confirmation Dialog */}

@@ -80,6 +80,7 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions) {
 
     if (!transport) {
       // Not configured - log to console
+      console.log('[Email] ⚠️ No email transport configured')
       console.log('[Email] To:', to)
       console.log('[Email] Subject:', subject)
       if (text) console.log('[Email] Text:', text)
@@ -87,6 +88,8 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions) {
       return
     }
 
+    console.log(`Attempting to send email to ${to} via ${process.env.SMTP_HOST}`)
+    
     const info = await transport.sendMail({
       from: process.env.EMAIL_FROM || process.env.SMTP_USER,
       to,
@@ -95,20 +98,48 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions) {
       html
     })
 
-    console.log('✅ Email sent:', info.messageId)
+    console.log('Email sent:', info.messageId)
     return { success: true, messageId: info.messageId }
   } catch (error) {
-    console.error('❌ Failed to send email:', error)
+    console.error('Failed to send email to', to, ':', error)
     throw error
   }
 }
 
 /**
  * Send OTP Email
+ * @param email - User's email address
+ * @param otp - One-time password
+ * @param expiryMinutes - OTP expiration time in minutes
+ * @param purpose - OTP purpose: 'signin' (default), 'verify', 'reset', 'pos'
  */
-export const sendOtpEmail = async (email: string, otp: string, expiryMinutes: number = 10) => {
+export const sendOtpEmail = async (
+  email: string,
+  otp: string,
+  expiryMinutes: number = 10,
+  purpose: 'signin' | 'verify' | 'reset' | 'pos' = 'signin'
+) => {
   try {
-    const template = emailTemplates.sendOtp(email, otp, expiryMinutes)
+    let template;
+    
+    switch (purpose) {
+      case 'verify':
+        // Email verification during onboarding - 30 min default
+        template = emailTemplates.verifyEmailOtp(email, otp, expiryMinutes || 30)
+        break;
+      case 'reset':
+        // Password reset - 15 min default
+        template = emailTemplates.resetPasswordOtp(email, otp, expiryMinutes || 15)
+        break;
+      case 'signin':
+      case 'pos':
+        // Sign-in and POS login use same urgent template - 10 min default
+        template = emailTemplates.signInOtp(email, otp, expiryMinutes || 10)
+        break;
+      default:
+        template = emailTemplates.signInOtp(email, otp, expiryMinutes || 10)
+    }
+    
     return await sendEmail({
       to: email,
       subject: template.subject,
@@ -116,7 +147,7 @@ export const sendOtpEmail = async (email: string, otp: string, expiryMinutes: nu
       text: template.text
     })
   } catch (error) {
-    console.error('❌ Failed to send OTP email:', error)
+    console.error('Failed to send OTP email:', error)
     throw error
   }
 }

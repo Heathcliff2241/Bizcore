@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMERATIONS
+// ============================================================================
+
+enum UserRole {
+  admin
+  tenant_owner
+  tenant_user
+  user
+}
+
+enum TenantUserRole {
+  owner
+  admin
+  editor
+  viewer
+}
+
+// ============================================================================
+// SUBSYSTEM 1: CORE & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id                          Int                  @id @default(autoincrement())
+  firstName                   String?
+  lastName                    String?
+  email                       String               @unique
+  password                    String?
+  role                        UserRole             @default(user)
+  isActive                    Boolean              @default(true)
+  emailVerified               Boolean              @default(false)
+  emailVerificationToken      String?
+  passwordResetToken          String?
+  passwordResetExpires        DateTime?
+  lastLogin                   DateTime?
+  loginAttempts               Int                  @default(0)
+  lockUntil                   DateTime?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @default(now())
+
+  activityLogs                ActivityLog[]
+  notifications               Notification[]
+  tenantRegistrations         TenantRegistration[]
+  tenantUsers                 TenantUser[]
+  ownedTenants                Tenant[]             @relation("TenantOwner")
+
+  @@map("users")
+}
+
+model Tenant {
+  id                    Int                    @id @default(autoincrement())
+  name                  String
+  subdomain             String                 @unique
+  domain                String?
+  description           String?
+  ownerId               Int
+  logo                  String?
+  isActive              Boolean                @default(true)
+  isPremium             Boolean                @default(false)
+  subscriptionPlan      String                 @default("free")
+  primaryColor          String?
+  secondaryColor        String?
+  customCss             String?
+  googleAnalytics       String?
+  facebookPixel         String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+
+  owner                 User                   @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tenantUsers           TenantUser[]
+  activityLogs          ActivityLog[]
+  notifications         Notification[]
+  adminNotifications    AdminNotification[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id          Int           @id @default(autoincrement())
+  tenantId    Int
+  userId      Int
+  role        TenantUserRole @default(viewer)
+  permissions Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now())
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+model ActivityLog {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tenantId  Int
+  action    String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int
+  userId    Int?
+  type      String
+  message   String
+  priority  String    @default("medium")
+  isRead    Boolean   @default(false)
+  actionUrl String?
+  createdAt DateTime  @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+model TenantRegistration {
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  email              String
+  businessName       String
+  businessDescription String?
+  verificationToken  String?
+  isVerified         Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now())
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_registrations")
+}
+
+model AdminNotification {
+  id        Int       @id @default(autoincrement())
+  type      String
+  tenantId  Int?
+  message   String
+  isRead    Boolean   @default(false)
+  isDismissed Boolean @default(false)
+  createdAt DateTime  @default(now())
+
+  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@map("admin_notifications")
+}
+
+model OTP {
+  id        Int       @id @default(autoincrement())
+  email     String
+  otp       String
+  userType  String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@map("otps")
+}

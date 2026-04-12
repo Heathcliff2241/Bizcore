@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { X, ZoomIn } from 'lucide-react'
 import type { StorefrontContext } from './types'
 import { resolveStorefrontHref } from './utils/links'
+import { getResponsiveSizes, getResponsiveQuality } from './utils/responsiveImages'
 
 interface ImageBlockProps {
   src?: string
@@ -140,7 +141,9 @@ export function ImageBlock({
                 className={`object-${objectFit} transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImageError(true)}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                sizes={getResponsiveSizes('feature')}
+                quality={getResponsiveQuality()}
+                loading="lazy"
               />
             </div>
             

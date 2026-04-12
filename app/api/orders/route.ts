@@ -4,6 +4,11 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveTenant } from '@/lib/tenant'
 import { logTenantActivity } from '@/lib/activityLogger'
+import { createNewOrderNotification } from '@/lib/notifications'
+
+// Route segment config - increase body size limit for payment proof uploads (up to 20MB)
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -30,7 +35,6 @@ export async function GET(request: NextRequest) {
     })
 
     const formattedOrders = orders.map((order) => {
-      const orderWithPayment = order as typeof order & Record<string, unknown>
       return {
         id: order.id,
         order_number: order.orderNumber,
@@ -44,12 +48,12 @@ export async function GET(request: NextRequest) {
         subtotal_amount: order.orderItems.reduce((sum: number, item) => sum + item.price * item.quantity, 0),
         tax_amount: order.tax,
         order_status: order.status,
-        payment_status: orderWithPayment.paymentStatus,
-        payment_method: orderWithPayment.paymentMethod,
-        amount_paid: orderWithPayment.amountPaid,
-        order_type: orderWithPayment.orderType,
-        delivery_address: orderWithPayment.deliveryAddress || null,
-        paymentProof: orderWithPayment.paymentProof || null
+        payment_status: order.paymentStatus,
+        payment_method: order.paymentMethod,
+        amount_paid: order.amountPaid,
+        order_type: order.orderType,
+        delivery_address: order.deliveryAddress || null,
+        paymentProof: (order as any).paymentProof || null
       }
     })
 
@@ -63,9 +67,46 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('POST /api/orders - Request body:', JSON.stringify(body, null, 2))
     
-    const { customer, items, deliveryType, address, subtotal, paymentMethod, paymentProof, tip = 0, discount = 0 } = body
+    const { customer, items, deliveryType, subtotal, paymentMethod, paymentProof, tip = 0, discount = 0 } = body
+    
+    // Debug: Log without full body since paymentProof could be huge
+    console.log('POST /api/orders - Request:', {
+      customerEmail: customer?.email,
+      itemCount: items?.length || 0,
+      deliveryType,
+      paymentMethod,
+      hasPaymentProof: !!paymentProof,
+      proofLength: paymentProof?.length || 0,
+      bodySize: JSON.stringify(body).length
+    })
+    
+    // Debug: Log paymentProof info separately with validation
+    if (paymentProof) {
+      console.log('POST /api/orders - Payment proof received:', {
+        type: typeof paymentProof,
+        isString: typeof paymentProof === 'string',
+        length: paymentProof?.length || 0,
+        startsWith: paymentProof?.substring(0, 20),
+        preview: paymentProof?.substring(0, 50) + '...'
+      })
+      
+      // Validate base64
+      try {
+        if (paymentProof.startsWith('data:')) {
+          const base64part = paymentProof.split(',')[1]
+          if (base64part) {
+            const decoded = Buffer.from(base64part, 'base64').toString('utf-8')
+            console.log('POST /api/orders - Base64 validation: Valid')
+          }
+        }
+      } catch (e) {
+        console.warn('POST /api/orders - Base64 validation warning:', e)
+      }
+    } else {
+      console.warn('POST /api/orders - No payment proof provided despite paymentMethod:', paymentMethod)
+    }
+    let address = body.address  // Make address mutable so it can be reassigned
     if (!items || !Array.isArray(items) || items.length === 0) {
       console.error('POST /api/orders - Invalid items:', items)
       return NextResponse.json({ success: false, message: 'Cart is empty' }, { status: 400 })
@@ -108,8 +149,19 @@ export async function POST(request: NextRequest) {
       serverSubtotal += unitPrice * qty
     }
 
+    // Get tenant's tax rate from settings (default to 12% if not configured)
+    let taxRate = 12
+    if (tenant.settings) {
+      const settings = tenant.settings as Record<string, unknown>
+      const taxSettings = settings.tax as Record<string, unknown> | undefined
+      if (taxSettings && typeof taxSettings.defaultTaxPercent === 'number') {
+        taxRate = taxSettings.defaultTaxPercent
+        console.log('POST /api/orders - Using tenant tax rate:', taxRate)
+      }
+    }
+
     // Basic validation for totals
-    const serverTax = Number((serverSubtotal * 0.12).toFixed(2))
+    const serverTax = Number((serverSubtotal * (taxRate / 100)).toFixed(2))
     const deliveryFee = body.deliveryFee || 0
     const serverTotal = Math.round((serverSubtotal + serverTax - (discount || 0) + (tip || 0) + deliveryFee) * 100) / 100
     if (Math.abs(serverSubtotal - (Number(subtotal) || 0)) > 0.5) {
@@ -212,7 +264,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const order = await tx.order.create({ data: { tenantId: tenant.id, customerId: customerId ?? undefined, orderNumber, status: 'pending', paymentStatus: 'unpaid', orderType: deliveryType || 'delivery', total: serverTotal, tax: serverTax, discount: discount || 0, amountPaid: 0, paymentMethod: paymentMethod || 'cash', ...(paymentProof ? { paymentProof } : {}), ...(address ? { deliveryAddress: address } : {}), notes: '' } })
+      const order = await tx.order.create({ data: { tenantId: tenant.id, customerId: customerId ?? undefined, orderNumber, status: 'pending', paymentStatus: 'unpaid', orderType: deliveryType || 'delivery', total: serverTotal, tax: serverTax, discount: discount || 0, amountPaid: 0, paymentMethod: paymentMethod || 'cash', ...(paymentProof ? { paymentProof } : {}), ...(address ? { deliveryAddress: typeof address === 'string' ? address : JSON.stringify(address) } : {}), notes: '' } })
+
+      // Debug: Log what was saved
+      console.log('POST /api/orders - Order created:', {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        paymentMethod: order.paymentMethod,
+        paymentProofSaved: !!order.paymentProof,
+        paymentProofLength: order.paymentProof?.length || 0
+      })
 
       // Create order items and record ingredients usage
       for (const i of items) {
@@ -266,7 +327,31 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    return NextResponse.json({ success: true, message: 'Order created', orderId: createResult.id, orderNumber: createResult.orderNumber }, { status: 201 })
+    // Send notification to tenant about new order
+    const customerName = customer?.name || customer?.email || 'Guest'
+    await createNewOrderNotification(
+      tenant.id,
+      createResult.id,
+      createResult.orderNumber,
+      customerName,
+      serverTotal,
+      items.length,
+      tenant.subdomain
+    )
+
+    // Return full order data including paymentProof
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Order created', 
+      data: {
+        id: createResult.id,
+        orderNumber: createResult.orderNumber,
+        paymentMethod: createResult.paymentMethod,
+        paymentProof: createResult.paymentProof || null,
+        total: createResult.total,
+        status: createResult.status
+      }
+    }, { status: 201 })
   } catch (error) {
     console.error('POST /api/orders failed with error:', error)
     console.error('POST /api/orders - Error stack:', error instanceof Error ? error.stack : 'No stack trace')

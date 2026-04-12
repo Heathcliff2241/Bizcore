@@ -26,10 +26,10 @@ export function BlankHeaderSection({
       style={{
         backgroundColor,
         color: textColor,
-        height: `${height}px`,
+        height: `clamp(56px, 12vw, ${height}px)`,
       }}
     >
-      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} px-8 md:px-16 lg:px-24 h-full overflow-visible`}>
+      <div className={`w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} px-4 sm:px-6 md:px-8 lg:px-12 h-full overflow-visible`}>
         <div className="flex items-center justify-center h-full">
           <div
             className="text-sm font-medium"

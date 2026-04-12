@@ -10,7 +10,8 @@ import {
   SparklesIcon,
   BuildingStorefrontIcon,
   CreditCardIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline'
 
 import { useSettings } from '@/lib/settings-context'
@@ -44,11 +45,16 @@ interface TaxSettings {
   defaultTaxPercent: number
 }
 
+interface DeliverySettings {
+  defaultDeliveryFee: number
+}
+
 interface Settings {
   brandColors: BrandColors
   businessInfo: BusinessInfo
   paymentSettings?: PaymentSettings
   tax?: TaxSettings
+  delivery?: DeliverySettings
 }
 
 interface SaveStatus {
@@ -82,6 +88,9 @@ export default function SettingsPage() {
     },
     tax: {
       defaultTaxPercent: 1
+    },
+    delivery: {
+      defaultDeliveryFee: 50
     }
   })
   const [loading, setLoading] = useState(true)
@@ -146,6 +155,9 @@ export default function SettingsPage() {
           },
           tax: (settingsData.tax as TaxSettings) || {
             defaultTaxPercent: 1
+          },
+          delivery: (settingsData.delivery as DeliverySettings) || {
+            defaultDeliveryFee: 50
           }
         }
         setSettings(mergedSettings)
@@ -181,7 +193,8 @@ export default function SettingsPage() {
           brandColors: (responseData.brandColors as BrandColors) || newSettings.brandColors,
           businessInfo: (responseData.businessInfo as BusinessInfo) || newSettings.businessInfo,
           paymentSettings: (responseData.paymentSettings as PaymentSettings) || newSettings.paymentSettings,
-          tax: (responseData.tax as TaxSettings) || newSettings.tax
+          tax: (responseData.tax as TaxSettings) || newSettings.tax,
+          delivery: (responseData.delivery as DeliverySettings) || newSettings.delivery
         }
         setSettings(mergedSettings)
         setSaveStatus({ type: 'success', message: 'Settings saved successfully!' })
@@ -227,6 +240,7 @@ export default function SettingsPage() {
     { id: 'brand', label: 'Brand Colors', icon: PaintBrushIcon },
     { id: 'business', label: 'Business Info', icon: BuildingStorefrontIcon },
     { id: 'tax', label: 'Tax Settings', icon: CalculatorIcon },
+    { id: 'delivery', label: 'Delivery Settings', icon: TruckIcon },
     { id: 'payment', label: 'Payment Settings', icon: CreditCardIcon }
   ]
 
@@ -601,6 +615,54 @@ export default function SettingsPage() {
                       style={ringStyle}
                     />
                     <p className="text-xs text-gray-500">Applied to all products unless overridden individually</p>
+                  </motion.div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Delivery Settings Tab */}
+          {activeTab === 'delivery' && (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4 }}
+              className="space-y-6"
+            >
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <TruckIcon className="w-5 h-5" style={{ color: theme.primary }} />
+                  <h3 className="text-lg font-semibold text-gray-900">Delivery Settings</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-6">
+                  Configure delivery costs applied to orders with delivery type.
+                </p>
+
+                <div className="space-y-6">
+                  {/* Default Delivery Fee */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="space-y-2"
+                  >
+                    <label className="block text-sm font-medium text-gray-700">Default Delivery Fee (₱)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={settings.delivery?.defaultDeliveryFee || 50}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        delivery: {
+                          defaultDeliveryFee: parseFloat(e.target.value) || 0
+                        }
+                      })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent transition-all"
+                      placeholder="50"
+                      style={ringStyle}
+                    />
+                    <p className="text-xs text-gray-500">Applied to all orders with delivery when selected at checkout</p>
                   </motion.div>
                 </div>
               </div>

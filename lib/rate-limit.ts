@@ -81,7 +81,7 @@ export function cleanupExpiredEntries() {
   }
 
   if (cleaned > 0) {
-    console.log(`🧹 Cleaned up ${cleaned} expired rate limit entries`)
+    console.log(`Cleaned up ${cleaned} expired rate limit entries`)
   }
 }
 

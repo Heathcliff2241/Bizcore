@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth/next'
-import { customerAuthOptions } from '@/lib/customerAuth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { AccountNavigation } from '@/components/storefront/AccountNavigation'
 import { AccountContent } from '@/components/storefront/AccountContent'
@@ -19,7 +19,7 @@ export default async function AccountOrdersPage({ params }: Props) {
   const tenant = await prisma.tenant.findUnique({ where: { subdomain } })
   if (!tenant) return notFound()
 
-  const session = await getServerSession(customerAuthOptions)
+  const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     redirect(`/auth/signin?redirect=/storefront/${subdomain}/account/orders`)
   }

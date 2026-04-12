@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -18,7 +19,6 @@ import {
   PowerIcon,
   SparklesIcon,
   BellIcon,
-  CheckCircleIcon,
   ListBulletIcon
 } from '@heroicons/react/24/outline'
 
@@ -80,9 +80,25 @@ const navItems: NavItem[] = [
 function AdminNavigation({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false) // Changed to false for mobile-first
+  const [isMobile, setIsMobile] = useState(false)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Check if mobile on mount and window resize
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 1024 // lg breakpoint
+      setIsMobile(mobile)
+      if (!mobile && !sidebarOpen) {
+        setSidebarOpen(true) // Auto-open on desktop
+      }
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [sidebarOpen])
 
   // Fetch unread notifications count
   useEffect(() => {
@@ -106,14 +122,42 @@ function AdminNavigation({ children }: { children?: React.ReactNode }) {
 
   return (
     <>
+      {/* Mobile Overlay Backdrop */}
+      {isMobile && sidebarOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+        />
+      )}
+
+      {/* Mobile Menu Button */}
+      {isMobile && !sidebarOpen && (
+        <motion.button
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 p-2.5 sm:p-3 bg-white border border-blue-200 rounded-xl shadow-lg text-blue-600 hover:bg-blue-50 transition-colors lg:hidden touch-manipulation"
+          aria-label="Open menu"
+        >
+          <Bars3Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+        </motion.button>
+      )}
+
       {/* Sidebar */}
       <motion.aside
-        initial={{ x: -300 }}
-        animate={{ x: 0 }}
+        initial={{ x: isMobile ? -300 : 0 }}
+        animate={{ x: sidebarOpen || !isMobile ? 0 : -300 }}
         exit={{ x: -300 }}
-        transition={{ duration: 0.3 }}
-        className={`bg-white border-r border-blue-100/50 backdrop-blur-sm fixed left-0 top-0 h-screen z-30 flex flex-col`}
-        style={{ width: sidebarOpen ? '256px' : '80px' }}
+        transition={{ duration: 0.3, type: 'spring', damping: 25 }}
+        className={`bg-white border-r border-blue-100/50 backdrop-blur-sm fixed left-0 top-0 h-screen flex flex-col ${
+          isMobile ? 'z-50 w-64' : 'z-30'
+        }`}
+        style={{ width: isMobile ? '256px' : (sidebarOpen ? '256px' : '80px') }}
       >
         {/* Logo */}
         <div
@@ -139,7 +183,7 @@ function AdminNavigation({ children }: { children?: React.ReactNode }) {
               </motion.button>
             </>
           )}
-          {!sidebarOpen && (
+          {!sidebarOpen && !isMobile && (
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -174,6 +218,9 @@ function AdminNavigation({ children }: { children?: React.ReactNode }) {
                 >
                     <Link
                       href={item.href}
+                      onClick={() => {
+                        if (isMobile) setSidebarOpen(false)
+                      }}
                       className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 ${
                         isActive
                           ? 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-600/30'
@@ -269,7 +316,9 @@ function AdminNavigation({ children }: { children?: React.ReactNode }) {
 
       {/* Main Content Area */}
       <motion.div
-        animate={{ marginLeft: sidebarOpen ? '256px' : '80px' }}
+        animate={{ 
+          marginLeft: isMobile ? '0px' : (sidebarOpen ? '256px' : '80px') 
+        }}
         transition={{ duration: 0.3 }}
         className="flex-1 bg-gradient-to-br from-white via-blue-50/40 to-white min-h-screen flex flex-col"
               >
@@ -279,9 +328,9 @@ function AdminNavigation({ children }: { children?: React.ReactNode }) {
         <motion.main
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="p-6 md:p-8"
+          className={`p-4 sm:p-6 md:p-8 ${isMobile ? 'pt-16 sm:pt-20' : ''}`}
         >
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
         </motion.main>

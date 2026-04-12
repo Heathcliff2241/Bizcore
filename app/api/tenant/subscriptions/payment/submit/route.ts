@@ -27,7 +27,13 @@ export async function POST(request: NextRequest) {
       gcashTransactionId,
       gcashProof,
       paymentMethodDetails,
+      planName,
     } = body;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let tenant: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let payment: any = null;
 
     // Validate inputs
     if (!subscriptionId || !amount || !gcashTransactionId) {
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Verify subscription belongs to tenant
     const subscription = await prisma.subscription.findUnique({
       where: { id: subscriptionId },
-      select: { tenantId: true, status: true },
+      select: { tenantId: true, status: true, pendingUpgradePlanId: true },
     });
 
     if (!subscription || subscription.tenantId !== parseInt(session.user.tenantId, 10)) {
@@ -50,10 +56,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Look up plan ID by name for better metadata
+    let planId = null;
+    if (planName) {
+      const plan = await prisma.plan.findUnique({
+        where: { name: planName },
+        select: { id: true },
+      });
+      planId = plan?.id || null;
+    }
+
     // Create Payment record with pending status
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const payment = await (prisma.payment.create as any)({
+    payment = await (prisma.payment.create as any)({
       data: {
         subscriptionId,
         status: 'unpaid', // Will be marked 'paid' once admin verifies
@@ -68,6 +84,8 @@ export async function POST(request: NextRequest) {
           verificationStatus: 'pending', // pending, verified, expired, rejected
           adminNotes: null,
           paymentMethodDetails: paymentMethodDetails || null,
+          planName: planName || null, // Store the plan name being upgraded to
+          planId: planId, // Store the plan ID for more reliable lookups
         },
       },
     });
@@ -87,23 +105,45 @@ export async function POST(request: NextRequest) {
       });
     } else {
       const invoiceNumber = `INV-${Date.now()}`;
+      
+      // Get the plan name - prefer from payment metadata, fallback to pending upgrade
+      let planDescription = 'Subscription Upgrade';
+      let resolvedPlanName: string | null = planName || null; // From request body
+      
+      if (!resolvedPlanName && subscription.pendingUpgradePlanId) {
+        const upgradePlan = await prisma.plan.findUnique({
+          where: { id: subscription.pendingUpgradePlanId },
+          select: { name: true },
+        });
+        if (upgradePlan) {
+          resolvedPlanName = upgradePlan.name;
+        }
+      }
+      
+      if (resolvedPlanName) {
+        planDescription = `${resolvedPlanName} Plan Upgrade`;
+      }
+      
+      // Convert amount from cents to pesos for storage (divide by 100)
+      const amountInPesos = amount / 100; // Convert cents to pesos
+      
       await prisma.invoice.create({
         data: {
           subscriptionId,
           paymentId: payment.id,
           invoiceNumber,
-          status: 'draft',
-          subtotal: amount,
+          status: 'issued',
+          subtotal: amountInPesos,
           tax: 0,
           discount: 0,
-          total: amount,
+          total: amountInPesos,
           dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour payment window
           lineItems: [
             {
-              description: 'Subscription Upgrade',
+              description: planDescription,
               quantity: 1,
-              unitPrice: amount,
-              total: amount,
+              unitPrice: amountInPesos,
+              total: amountInPesos,
             },
           ],
         },
@@ -117,46 +157,32 @@ export async function POST(request: NextRequest) {
         select: { email: true, firstName: true, lastName: true },
       });
 
-      const tenant = await prisma.tenant.findUnique({
+      tenant = await prisma.tenant.findUnique({
         where: { id: parseInt(session.user.tenantId, 10) },
         select: { name: true },
       });
 
       const subscription = await prisma.subscription.findUnique({
         where: { id: subscriptionId },
-        select: { planId: true },
+        select: { planId: true, pendingUpgradePlanId: true },
       });
 
       if (user && tenant) {
-        const recipientName = `${user.firstName} ${user.lastName}`.trim() || 'Customer';
-        await sendPaymentConfirmationEmail({
-          recipientEmail: user.email || session.user.email || '',
-          recipientName,
-          tenantName: tenant.name,
+        await sendPaymentConfirmationEmail(
+          tenant.name,
+          planName || 'Plan Upgrade',
           amount,
-          currency: 'PHP',
-          gcashTransactionId,
-          expiresAt,
-        });
+          'PHP',
+          'upgrade'
+        );
       }
 
       // Send admin notification email
       if (subscription) {
-        // Use pending upgrade plan if it exists, otherwise use current plan
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const planIdToShow = ((subscription as any).pendingUpgradePlanId || subscription.planId) as string;
-        const planNames: Record<string, string> = {
-          'trial': 'Trial',
-          'basic': 'BizCore Starter',
-          'premium': 'BizCore Premium',
-          'enterprise': 'Enterprise'
-        };
-        const planDisplayName = planNames[planIdToShow] || planIdToShow;
-
         if (tenant) {
           await sendAdminPaymentSubmittedEmail(
             tenant.name,
-            planDisplayName,
+            planName || 'Plan Upgrade',
             amount,
             'PHP',
             gcashTransactionId

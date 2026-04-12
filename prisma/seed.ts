@@ -51,42 +51,19 @@ async function main() {
 
   console.log('✓ Created tenant owner user:', tenantOwnerUser.email)
 
-  // Create demo tenant
+  // Skip creating admin tenant - using existing tenant instead
+  // Just fetch the existing advena tenant for seeding sample data
+
+  // Create or get advena tenant
   const tenant = await prisma.tenant.upsert({
-    where: { subdomain: 'olaf' },
-    update: {},
-    create: {
-      name: 'Olaf Store',
-      subdomain: 'olaf',
-      domain: 'olaf.local',
-      ownerId: adminUser.id,
-      description: 'Demo storefront for testing',
-      isActive: true,
-      isPremium: true,
-      subscriptionPlan: 'premium',
-      subscriptionExpires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      primaryColor: '#3B82F6',
-      secondaryColor: '#10B981',
-    },
-  })
-
-  console.log('✓ Created tenant:', tenant.subdomain)
-
-  // Create another demo tenant for "advena" owned by tenant owner
-  const tenant2 = await prisma.tenant.upsert({
     where: { subdomain: 'advena' },
-    update: {
-      settings: {
-        gcashNumber: '09123456789',
-        gcashQrCode: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-      }
-    },
+    update: {},
     create: {
       name: 'Advena Store',
       subdomain: 'advena',
       domain: 'advena.local',
       ownerId: tenantOwnerUser.id,
-      description: 'Another demo storefront',
+      description: 'Demo storefront',
       isActive: true,
       isPremium: false,
       subscriptionPlan: 'free',
@@ -99,7 +76,7 @@ async function main() {
     },
   })
 
-  console.log('✓ Created tenant:', tenant2.subdomain)
+  console.log('✓ Created/fetched tenant:', tenant.subdomain)
 
   // Create sample products
   await prisma.product.create({
@@ -126,14 +103,21 @@ async function main() {
 
   console.log('✓ Created sample products')
 
-  // Create test customer for olaf tenant
+  // Create test customer for advena tenant
   const customerPassword = await bcrypt.hash('password123', 10)
-  const testCustomer = await prisma.customer.create({
-    data: {
+  const testCustomer = await prisma.customer.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: 'customer@advena.local'
+      }
+    },
+    update: {},
+    create: {
       tenantId: tenant.id,
       firstName: 'Test',
       lastName: 'Customer',
-      email: 'customer@olaf.local',
+      email: 'customer@advena.local',
       password: customerPassword,
       phone: '+1 (555) 123-4567',
       address: {
@@ -149,10 +133,17 @@ async function main() {
 
   console.log('✓ Created test customer:', testCustomer.email)
 
-  // Create test customer for advena tenant
-  const advenaCustomer = await prisma.customer.create({
-    data: {
-      tenantId: tenant2.id,
+  // Create another test customer for advena tenant
+  const advenaCustomer = await prisma.customer.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: 'john@example.com'
+      }
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
       firstName: 'John',
       lastName: 'Doe',
       email: 'john@example.com',

@@ -76,7 +76,7 @@ export async function sendTenantWarningEmail(
             <p>Hi ${tenantName},</p>
 
             <div class="alert-banner">
-              <div class="alert-icon" style="font-size: 28px;">⚠</div>
+              <div class="alert-icon" style="font-size: 28px;"></div>
               <div class="alert-title">Account Notice Required</div>
               <div class="alert-message">
                 We're reaching out regarding your BizCore account. Please review the message below.
@@ -158,7 +158,7 @@ export async function sendTenantDeactivationEmail(
             <p>Hi ${tenantName},</p>
 
             <div class="alert-banner">
-              <div class="alert-icon" style="color: #dc2626; font-size: 24px; line-height: 1;">●</div>
+              <div class="alert-icon" style="color: #dc2626; font-size: 24px; line-height: 1;"></div>
               <div class="alert-title">Account Deactivated</div>
               <div class="alert-message">
                 Your BizCore account for "${businessName}" has been deactivated by our admin team.
@@ -203,6 +203,129 @@ export async function sendTenantDeactivationEmail(
   `;
 
   const subject = `[BizCore] Your Account Has Been Deactivated`;
+
+  return sendEmail(tenantEmail, subject, html);
+}
+
+/**
+ * Send cancellation confirmation email to tenant
+ */
+export async function sendTenantCancellationConfirmationEmail(
+  tenantEmail: string,
+  tenantName: string,
+  planName: string,
+  refundAmount: number,
+  currency: string,
+  accessEndDate: Date,
+  gracePeriodEnd: Date
+) {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-PH', { style: 'currency', currency: currency }).format(amount / 100);
+  };
+
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString('en-PH', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Subscription Cancelled</title>
+        <style>
+          body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f8fafc; }
+          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+          .header { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 30px; text-align: center; }
+          .content { padding: 30px; }
+          .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; background-color: #fef3c7; color: #92400e; }
+          .refund-box { background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .refund-amount { font-size: 24px; font-weight: bold; color: #059669; }
+          .access-info { background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .winback-section { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .winback-title { color: #1e40af; font-weight: bold; margin-bottom: 10px; }
+          .action-button { display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
+          .footer { background: #f1f5f9; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>We're Sorry to See You Go</h1>
+            <p>Your subscription has been cancelled</p>
+          </div>
+
+          <div class="content">
+            <p>Dear ${tenantName},</p>
+
+            <p>We've processed your request to cancel your <strong>${planName}</strong> subscription. We're truly sorry to see you go and hope you'll consider returning in the future.</p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <span class="status-badge">Subscription Cancelled</span>
+            </div>
+
+            ${refundAmount > 0 ? `
+              <div class="refund-box">
+                <h3 style="margin: 0 0 10px 0; color: #059669;">Refund Processed</h3>
+                <p style="margin: 0; color: #065f46;">We've processed a refund for the unused portion of your subscription.</p>
+                <p class="refund-amount">${formatCurrency(refundAmount)}</p>
+                <p style="margin: 10px 0 0 0; font-size: 14px; color: #065f46;">The refund will appear in your original payment method within 3-5 business days.</p>
+              </div>
+            ` : `
+              <div class="access-info">
+                <h3 style="margin: 0 0 10px 0; color: #374151;">No Refund Due</h3>
+                <p style="margin: 0; color: #6b7280;">Your subscription has been cancelled without refund as per our cancellation policy.</p>
+              </div>
+            `}
+
+            <div class="access-info">
+              <h3 style="margin: 0 0 10px 0; color: #374151;">Access Information</h3>
+              <p style="margin: 5px 0;"><strong>Access End Date:</strong> ${formatDate(accessEndDate)}</p>
+              <p style="margin: 5px 0;"><strong>Grace Period Ends:</strong> ${formatDate(gracePeriodEnd)}</p>
+              <p style="margin: 10px 0 0 0; font-size: 14px; color: #6b7280;">During the grace period, you can reactivate your subscription at any time without losing your data.</p>
+            </div>
+
+            <div class="winback-section">
+              <h3 class="winback-title">We Value You as a Customer</h3>
+              <p style="margin: 0 0 15px 0; color: #1e40af;">We're committed to making BizCore better. If there was anything we could have done differently, we'd love to hear from you.</p>
+
+              <p style="margin: 0 0 15px 0; color: #1e40af;"><strong>Special Offer:</strong> Reactivate your subscription within the next 7 days and receive 50% off your first month!</p>
+
+              <div style="text-align: center;">
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://app.bizcore.ph'}/dashboard/billing/subscriptions" class="action-button">
+                  Reactivate Subscription
+                </a>
+              </div>
+
+              <p style="margin: 15px 0 0 0; font-size: 13px; color: #1e40af;">
+                <em>We'll be sending you a few gentle reminders over the next week with special offers to welcome you back.</em>
+              </p>
+            </div>
+
+            <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #3b82f6;">
+              <h4 style="margin: 0 0 10px 0; color: #1f2937;">Questions or Need Help?</h4>
+              <p style="margin: 0; color: #6b7280;">If you have any questions about your cancellation or would like to discuss your experience, our support team is here to help.</p>
+              <p style="margin: 10px 0 0 0; color: #3b82f6;"><strong>Email:</strong> support@bizcore.ph</p>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for being part of the BizCore community.</p>
+            <p>We hope to see you again soon!</p>
+            <p style="margin-top: 15px;">© 2025 BizCore. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const subject = `Your BizCore Subscription Has Been Cancelled`;
 
   return sendEmail(tenantEmail, subject, html);
 }

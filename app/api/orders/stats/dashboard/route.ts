@@ -35,7 +35,9 @@ export async function GET(request: NextRequest) {
       _sum: { total: true },
       where: {
         tenantId: tenant.id,
-        createdAt: { gte: todayStart }
+        createdAt: { gte: todayStart },
+        paymentStatus: 'paid',
+        status: { in: ['completed', 'delivered'] }
       }
     })
 
@@ -50,7 +52,9 @@ export async function GET(request: NextRequest) {
       _sum: { total: true },
       where: {
         tenantId: tenant.id,
-        createdAt: { gte: monthStart }
+        createdAt: { gte: monthStart },
+        paymentStatus: 'paid',
+        status: { in: ['completed', 'delivered'] }
       }
     })
 

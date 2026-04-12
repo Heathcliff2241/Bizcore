@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendTenantPaymentApprovedEmail, sendAdminPaymentVerifiedEmail, sendPaymentRejectedEmail } from '@/lib/email/paymentEmails';
+import { createReactivationPaymentVerifiedNotification } from '@/lib/notifications';
 
 /**
  * POST /api/admin/subscriptions/payment/verify
@@ -69,10 +70,23 @@ export async function POST(request: NextRequest) {
         subscriptionUpdateData.pendingUpgradePlanId = null;
         subscriptionUpdateData.upgradePendingAt = null;
 
+        // Fetch the new plan to get its billing cycle
+        const newPlan = await prisma.plan.findUnique({
+          where: { id: payment.subscription.pendingUpgradePlanId },
+          select: { billingCycle: true },
+        });
+
+        // Update billing cycle based on new plan
+        if (newPlan?.billingCycle) {
+          subscriptionUpdateData.billingCycle = newPlan.billingCycle;
+        }
+
         // Recalculate billing cycle dates for the new plan
         const cycleStart = new Date();
-        // Default to monthly, but ideally fetch from plan
-        const cycleEnd = new Date(cycleStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const billingCycle = newPlan?.billingCycle || 'monthly';
+        const cycleEnd = billingCycle === 'annual'
+          ? new Date(cycleStart.getTime() + 365 * 24 * 60 * 60 * 1000)
+          : new Date(cycleStart.getTime() + 30 * 24 * 60 * 60 * 1000);
 
         subscriptionUpdateData.currentPeriodStart = cycleStart;
         subscriptionUpdateData.currentPeriodEnd = cycleEnd;
@@ -119,14 +133,51 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Send admin notification
-        const planName = payment.subscription.plan?.name || 'Premium';
+        // Send admin notification - use the upgrade plan name if available
+        let adminPlanName = payment.subscription.plan?.name || 'Premium';
+        if (payment.subscription.pendingUpgradePlanId) {
+          const upgradePlan = await prisma.plan.findUnique({
+            where: { id: payment.subscription.pendingUpgradePlanId },
+            select: { name: true },
+          });
+          if (upgradePlan) {
+            adminPlanName = upgradePlan.name;
+          }
+        }
         await sendAdminPaymentVerifiedEmail(
           payment.subscription.tenant.name,
-          planName,
+          adminPlanName,
           payment.amount,
           payment.currency || 'PHP'
         );
+
+        // Create tenant notification for payment verification
+        try {
+          // Determine plan name for notification
+          let notificationPlanName = payment.subscription.plan?.name || 'Plan';
+          if (payment.subscription.pendingUpgradePlanId) {
+            const upgradePlan = await prisma.plan.findUnique({
+              where: { id: payment.subscription.pendingUpgradePlanId },
+              select: { name: true },
+            });
+            if (upgradePlan) {
+              notificationPlanName = upgradePlan.name;
+            }
+          }
+          
+          // Check if this is a reactivation (from cancelled status to active)
+          if (updatedSubscription.status === 'active') {
+            await createReactivationPaymentVerifiedNotification(
+              payment.subscription.tenantId,
+              notificationPlanName,
+              payment.amount,
+              'dashboard'  // Note: We don't have subdomain here, but notifications show in dashboard anyway
+            );
+          }
+        } catch (tenantNotificationError) {
+          console.error('[POST /api/admin/subscriptions/payment/verify] Tenant notification error:', tenantNotificationError);
+          // Don't fail the payment if notification creation fails
+        }
       } catch (emailError) {
         console.error('[POST /api/admin/subscriptions/payment/verify] Email error:', emailError);
       }

@@ -1,6 +1,6 @@
 import ResetPage from '@/app/auth/reset/page'
 import { getServerSession } from 'next-auth'
-import { customerAuthOptions } from '@/lib/customerAuth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { HeaderSection } from '@/components/storefront/HeaderSection'
@@ -16,7 +16,7 @@ export default async function StorefrontReset({ params }: { params: { subdomain:
   const tenant = await prisma.tenant.findUnique({ where: { subdomain } })
   if (!tenant) return notFound()
 
-  const session = await getServerSession(customerAuthOptions)
+  const session = await getServerSession(authOptions)
 
   const storefront = {
     id: tenant.id,

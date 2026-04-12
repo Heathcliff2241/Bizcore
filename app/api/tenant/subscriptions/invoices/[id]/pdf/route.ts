@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getServerSession } from "next-auth";
 import { NextResponse, NextRequest } from "next/server";
 import { authOptions } from "@/lib/auth";
@@ -68,8 +69,8 @@ function generateInvoiceHTML(
     return new Intl.NumberFormat("en-PH", {
       style: "currency",
       currency: "PHP",
-      minimumFractionDigits: 2,
-    }).format(amount / 100);
+      minimumFractionDigits: 0,
+    }).format(amount);
   };
 
   const formatDate = (date: Date) => {

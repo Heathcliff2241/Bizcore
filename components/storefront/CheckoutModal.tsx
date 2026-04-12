@@ -122,6 +122,12 @@ export function CheckoutModal({ storefront }: CheckoutModalProps) {
       }
     }
 
+    // Validate payment proof for GCash and Maya
+    if (['gcash', 'maya'].includes(paymentMethod) && !paymentProof) {
+      setError('Please upload your payment proof for this payment method')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -167,7 +173,7 @@ export function CheckoutModal({ storefront }: CheckoutModalProps) {
 
       await response.json()
       clearCart()
-      router.push(`/storefront/${storefront.subdomain}/orders`)
+      router.push(`/storefront/${storefront.subdomain}/account?tab=orders`)
     } catch (err) {
       console.error('Checkout error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')

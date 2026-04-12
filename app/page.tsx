@@ -3,8 +3,8 @@
 'use client';
 
 import Link from "next/link";
-import { motion, useScroll, useTransform } from "framer-motion";
-import React, { useRef, useState } from "react";
+import { motion } from "framer-motion";
+import React, { useState } from "react";
 import {
   ShoppingCart,
   CreditCard,
@@ -14,803 +14,744 @@ import {
   DollarSign,
   Heart,
   Clock,
+  ArrowRight,
+  Check,
+  Play,
 } from "lucide-react";
 import { PageWrapper } from "@/components/PageWrapper";
-import BizCoreWordmark from '@/components/BizCoreWordmark'
 import { ContactForm } from "@/components/landing/ContactForm"
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Premium Dark Blue Landing Page - Apple Grade Design
- * Showcases BizCore's 4 core offerings:
- * 1. Online Ordering
- * 2. Smart POS
- * 3. Inventory Management
- * 4. BrandStudio for Storefront Design
+ * BizCore Landing Page - Apple-Inspired Premium Design
+ * Clean, minimal, sophisticated with warm cream tones and dark blue accents
  */
 
-const container = {
+// Apple-style animation variants
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { duration: 0.6 } 
+  },
+};
+
+const staggerContainer = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.15,
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
     },
   },
 };
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 12 },
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.95 },
   show: { 
     opacity: 1, 
-    y: 0, 
-    transition: { duration: 0.8 } 
+    scale: 1,
+    transition: { duration: 0.5 }
   },
+};
+
+// Design tokens - Apple-inspired color palette
+const colors = {
+  cream: '#FAFAF8',
+  creamDark: '#F5F5F0',
+  darkBlue: '#0A1628',
+  blue: '#1E3A5F',
+  blueAccent: '#2563EB',
+  blueMuted: '#64748B',
+  text: '#1E293B',
+  textMuted: '#475569',
 };
 
 const features = [
   {
     icon: ShoppingCart,
     title: "Online Ordering",
-    description:
-      "Let customers order from anywhere, anytime. It all syncs with your POS so you're never out of sync.",
-color: "from-blue-500 to-blue-600",
+    subtitle: "24/7 availability",
+    description: "Let customers place orders anytime. Direct integration with your POS and inventory.",
   },
   {
     icon: CreditCard,
     title: "Point of Sale",
-    description:
-      "Checkout is fast. Payments are safe. Your team gets it right away. Built for real retail.",
-color: "from-cyan-500 to-cyan-600",
+    subtitle: "Lightning fast",
+    description: "Intuitive checkout. Secure payments. Real-time insights.",
   },
   {
     icon: Boxes,
     title: "Inventory",
-    description:
-      "Know what you have. Know what's running low. Never oversell. That's it.",
-color: "from-blue-400 to-blue-500",
+    subtitle: "Always accurate",
+    description: "Real-time tracking. Smart alerts. Never oversell again.",
   },
-  {
-    icon: Palette,
-    title: "Your Storefront",
-    description:
-      "Build a beautiful online store that actually converts. No developers needed. Just drag and publish.",
-    color: "from-indigo-500 to-indigo-600",
-  },
+  // {
+  //   icon: Palette,
+  //   title: "Storefront",
+  //   subtitle: "No code needed",
+  //   description: "Beautiful templates. Drag to customize. Publish instantly.",
+  // },
 ];
 
-const featureDetails: Record<string, { title: string; description: string; details: string; features: string[] }> = {
+const featureDetails: Record<number, { title: string; description: string; details: string; features: string[] }> = {
   0: {
     title: "Online Ordering",
-    description: "Let customers order from anywhere, anytime. It all syncs with your POS so you're never out of sync.",
-    details: "Your customers can browse and order 24/7 from their phone or computer. When they order, it goes straight to your kitchen or fulfillment team. Payments are secure, inventory stays accurate, and you get a notification for every order.",
+    description: "Let customers place orders anytime, anywhere.",
+    details: "Your customers can order 24/7 through multiple channels - web, mobile, and QR codes. All orders route directly to your team, with instant payment processing and automatic inventory updates.",
     features: [
-      "Works on phones and computers",
-      "QR codes for easy ordering",
-      "Safe payment processing",
-      "Real-time order updates",
-      "Customizable menus",
-      "Track allergies and preferences"
+      "Mobile & desktop optimized",
+      "QR code ordering",
+      "Secure payments",
+      "Real-time updates",
+      "Custom catalogs",
+      "Order tracking"
     ]
   },
   1: {
     title: "Point of Sale",
-    description: "Checkout is fast. Payments are safe. Your team gets it right away. Built for real retail.",
-    details: "This isn't your grandma's POS system. It's fast, it's intuitive, and it just works. Your team won't need training. Every transaction syncs instantly across your business. You'll see sales data in real-time.",
+    description: "Fast, intuitive, just works.",
+    details: "No training needed. Every transaction syncs instantly. See sales data in real-time.",
     features: [
-      "Blazingly fast checkout",
-      "All payment types accepted",
-      "Manage your team and permissions",
-      "Digital and email receipts",
-      "See sales insights instantly",
-      "Works online and offline"
+      "Fast checkout",
+      "All payment types",
+      "Team management",
+      "Digital receipts",
+      "Sales insights",
+      "Offline mode"
     ]
   },
   2: {
     title: "Inventory",
-    description: "Know what you have. Know what's running low. Never oversell. That's it.",
-    details: "Stop guessing about stock. You'll always know exactly what you have. We'll alert you before you run low. You can even see what's selling so you can order smarter. Multiple locations? We handle that too.",
+    description: "Know what you have. Always.",
+    details: "Real-time stock visibility. Alerts before you run low. Multi-location support.",
     features: [
-      "Real-time stock counts",
-      "Get alerts before you run out",
-      "Smart reorder recommendations",
-      "Track inventory across locations",
-      "See what's selling and why",
-      "Reduce waste and dead stock"
+      "Live stock counts",
+      "Low stock alerts",
+      "Smart reorder",
+      "Multi-location",
+      "Sales analytics",
+      "Waste reduction"
     ]
   },
-  3: {
-    title: "Your Storefront",
-    description: "Build a beautiful online store that actually converts. No developers needed. Just drag and publish.",
-    details: "You don't need a developer. You don't need to know code. Just choose a design you like, add your products and details, and hit publish. Your store works beautifully on phones, tablets, and desktops.",
-    features: [
-      "Choose from beautiful designs",
-      "Drag to customize",
-      "Works perfectly on all devices",
-      "Built-in SEO to get found",
-      "Publish in one click",
-      "Use your own domain"
-    ]
-  }
+  // 3: {
+  //   title: "Storefront",
+  //   description: "Your store, your way.",
+  //   details: "Choose a design, add your products, publish. Works beautifully everywhere.",
+  //   features: [
+  //     "Premium templates",
+  //     "Drag & drop",
+  //     "All devices",
+  //     "Built-in SEO",
+  //     "One-click publish",
+  //     "Custom domains"
+  //   ]
+  // }
 };
 
-// Icon rotation component for scroll awareness  
-function ScrollRotatingIcon({ icon: Icon, className = "" }: { icon: React.ComponentType<any>; className?: string }) {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start 80%", "end 20%"],
-  });
-
-  // More dramatic rotation - goes up to 720 degrees for slower, more mechanical feel
-  const rotate = useTransform(scrollYProgress, [0, 1], [0, 720]);
-
-  return (
-    <motion.div
-      ref={ref}
-      style={{ rotate }}
-      className={className}
-    >
-      <Icon className="w-full h-full" />
-      </motion.div>
-    );
-}
-
-// Benefits card component with scroll transform - slower, more dramatic movements
-function BenefitCard({ title, desc, index }: { title: string; desc: string; index: number }) {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start 80%", "end 20%"],
-  });
-
-  // Larger parallax range for more noticeable movement
-  const y = useTransform(scrollYProgress, [0, 1], [120, -120]);
-  // More dramatic opacity changes - disappears when not in view
-  const opacity = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0, 1, 1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0.85, 1, 1, 0.85]);
-
-  return (
-    <motion.div
-      ref={ref}
-      style={{ y, opacity, scale }}
-      initial={{ opacity: 0, scale: 0.85 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 1.0, delay: index * 0.15, ease: "easeOut" }}
-      whileHover={{
-        scale: 1.04,
-        transition: { duration: 0.15 }
-      }}
-      className="p-6 rounded-xl bg-white/90 border border-gray-200 hover:border-blue-500/30 transition cursor-pointer shadow-sm"
-    >
-      <motion.h4
-        className="text-lg font-semibold text-slate-900 mb-2"
-        initial={{ opacity: 0, x: -10 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        viewport={{ once: true, margin: "-50px" }}
-        transition={{ delay: index * 0.1 + 0.2 }}
-      >
-        {title}
-      </motion.h4>
-      <motion.p
-        className="text-blue-800"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true, margin: "-50px" }}
-        transition={{ delay: index * 0.1 + 0.3 }}
-      >
-        {desc}
-      </motion.p>
-    </motion.div>
-  );
-}
-
 export default function LandingPage() {
-const [expandedFeature, setExpandedFeature] = useState<number | null>(null);
+  const [expandedFeature, setExpandedFeature] = useState<number | null>(null);
+  
   return (
-<PageWrapper>
-    <div className="flex flex-col min-h-screen font-sans text-slate-900 bg-white overflow-x-hidden relative">
-      {/* Dark blue gradient accent overlay */}
-      <div className="absolute inset-0 pointer-events-none opacity-5 z-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-transparent to-indigo-900" />
-      </div>
-      
-      <div className="relative z-10">
-        {/* Apple-inspired Nav - Dark Blue Premium */}
+    <PageWrapper>
+      <div className="flex flex-col min-h-screen font-sans antialiased overflow-x-hidden" style={{ backgroundColor: colors.cream }}>
+        
+        {/* ========== NAVIGATION - Apple-style minimal ========== */}
         <motion.nav
-          initial={{ y: -8, opacity: 0 }}
+          initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.5 }}
           className="fixed top-0 z-50 w-full"
+          style={{ backgroundColor: 'rgba(250, 250, 248, 0.8)', backdropFilter: 'saturate(180%) blur(20px)' }}
         >
-          <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="rounded-2xl bg-white/90 backdrop-blur-sm shadow-md border border-gray-200 px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                          <div>
-                            <BizCoreWordmark className="text-2xl md:text-3xl" />
-                            <p className="text-xs text-blue-700">All-in-One Commerce Platform</p>
-                          </div>
-                      </div>
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="flex items-center justify-between h-14">
+              {/* Logo */}
+              <Link href="/" className="flex items-center">
+                <span className="text-xl font-bold tracking-tight" style={{ color: colors.darkBlue }}>
+                  BizCore
+                </span>
+              </Link>
 
+              {/* Center Navigation */}
               <div className="hidden md:flex items-center gap-8">
-                <a                   href="#about"                   className="text-sm text-blue-700 hover:text-blue-600 transition">
-                  About
-                </a>
-                <a                   href="#pricing"                   className="text-sm text-blue-700 hover:text-blue-600 transition">
-                  Pricing
-                </a>
-                <a href="#contact" className="text-sm text-blue-700 hover:text-blue-600 transition">
-                  Contact
-                </a>
-                <Link                   href="/auth/signin"                   className="text-sm text-blue-700 hover:text-blue-600 transition"                >
-                  Sign In
-                </Link>
-</div>
+                {['Features', 'Pricing', 'About'].map((item) => (
+                  <a
+                    key={item}
+                    href={`#${item.toLowerCase()}`}
+                    className="text-sm font-medium transition-colors duration-200 hover:opacity-60"
+                    style={{ color: colors.text }}
+                  >
+                    {item}
+                  </a>
+                ))}
+              </div>
 
-              <div className="flex items-center gap-3">
+              {/* Right Actions */}
+              <div className="flex items-center gap-4">
+                <Link
+                  href="/auth/signin"
+                  className="text-sm font-medium transition-colors duration-200 hover:opacity-60"
+                  style={{ color: colors.text }}
+                >
+                  Sign in
+                </Link>
                 <Link
                   href="/auth/signup"
-                  className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-700 to-indigo-800 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition shadow-md"
+                  className="px-4 py-2 text-sm font-medium text-white rounded-full transition-all duration-200 hover:scale-105"
+                  style={{ backgroundColor: colors.blueAccent }}
                 >
                   Get Started
                 </Link>
-</div>
               </div>
             </div>
           </div>
+          <div className="h-px w-full" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
         </motion.nav>
 
-      {/* HERO SECTION - Full Screen */}
-      <header className="relative min-h-screen flex items-center justify-center overflow-hidden mt-24">
-        {/* Animated gradient orbs background */}
-        <div className="absolute inset-0 pointer-events-none -z-10">
-          <motion.div
-            animate={{ x: [-60, 60, -60], y: [0, 30, 0] }}
-            transition={{ duration: 30, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute rounded-full opacity-20 left-0 top-0 w-96 h-96 blur-3xl bg-gradient-to-br from-blue-500 to-cyan-400"
+        {/* ========== HERO SECTION - Apple-inspired clean & bold ========== */}
+        <header className="relative min-h-screen flex items-center justify-center pt-14">
+          {/* Subtle gradient background */}
+          <div 
+            className="absolute inset-0 pointer-events-none"
+            style={{ 
+              background: `radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37, 99, 235, 0.08) 0%, transparent 50%)` 
+            }}
           />
-          <motion.div
-            animate={{ x: [60, -60, 60], y: [0, -30, 0] }}
-            transition={{ duration: 35, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute w-80 h-80 rounded-full opacity-15 right-0 top-1/3 blur-3xl bg-gradient-to-br from-indigo-500 to-blue-400"
-          />
-        </div>
-
-        <div className="relative max-w-5xl mx-auto px-6 text-center">
-          <motion.div
-            initial="hidden"
-            animate="show"
-            variants={container}
-            >
+          
+          <div className="relative max-w-4xl mx-auto px-6 text-center">
             <motion.div
-              variants={fadeUp}
-              transition={{ duration: 1.0 }}
-              className="mb-8 inline-block"
+              initial="hidden"
+              animate="show"
+              variants={staggerContainer}
             >
-              <div className="relative">
-                {/* Glow effect */}
-                <div className="absolute -inset-2 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full blur-lg opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
-                {/* Badge */}
-                <span className="relative px-4 py-2 text-sm font-semibold bg-gradient-to-r from-blue-500/30 to-cyan-500/30 text-blue-200 rounded-full border border-blue-400/50 backdrop-blur-sm shadow-lg shadow-blue-500/20">
-                  For businesses that want to do more
-                </span>
-              </div>
-            </motion.div>
-
-            <motion.h1
-              variants={fadeUp}
-              transition={{ duration: 1.0, delay: 0.1 }}
-              className="mb-8 text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold leading-tight tracking-tight"
-            >
-              Stop juggling{" "}
-              <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-400 bg-clip-text text-transparent">
-                five different apps
-              </span>
-            </motion.h1>
-
-            <motion.p
-              variants={fadeUp}
-              transition={{ duration: 1.0, delay: 0.2 }}
-                            className="max-w-3xl mx-auto mb-12 text-lg sm:text-xl text-blue-700 leading-relaxed"
-            >
-              Everything you need to run your business is in one place. Orders, payments, inventory, and your storefront. 
-              No more switching between tools. Just work.
-            </motion.p>
-
-            <motion.div
-              variants={fadeUp}
-              transition={{ duration: 1.0, delay: 0.3 }}
-                            className="flex flex-col sm:flex-row items-center justify-center gap-4"
-            >
-              <Link
-                className="px-8 py-4 text-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-2xl hover:shadow-blue-500/50 hover:from-blue-500 hover:to-indigo-500 transition transform hover:scale-105"
-                href="/auth/signup"
-              >
-                Try 14 days free (no credit card)
-              </Link>
-              <button
-                onClick={() => {
-                  const element = document.getElementById('features');
-                  element?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-8 py-4 text-lg font-semibold text-blue-300 border-2 border-blue-500/50 rounded-xl hover:bg-blue-500/10 transition backdrop-blur"
-              >
-                See how it works
-              </button>
-            </motion.div>
-
-            <motion.p
-              variants={fadeUp}
-              transition={{ delay: 0.4, duration: 1.0 }}
-              className="mt-8 text-blue-700 text-sm"
-            >
-              <span className="font-semibold">No credit card. No contracts. Cancel whenever.</span> Starting at ₱1,999/month
-            </motion.p>
-          </motion.div>
-        </div>
-      </header>
-
-      {/* FEATURES SHOWCASE - 4 Core Offerings */}
-      <section id="features" className="py-32 relative border-t-2 border-gray-200 bg-gradient-to-br from-white via-blue-50/30 to-white">
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-blue-500/5 to-transparent" />
-        
-        <div className="relative max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-extrabold mb-4 text-slate-900">
-                The tools you actually need
-            </h2>
-            <p className="text-xl text-blue-800 max-w-2xl mx-auto">
-              Four simple features that work together. No bloat, no complexity.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            variants={container}
-            viewport={{ once: true, margin: "-50px" }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-6"
-          >
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
-              const isExpanded = expandedFeature === index;
-              const details = featureDetails[index];
-              
-              return (
-                <motion.div
-                  key={index}
-                  whileHover={{ y: -8, transition: { duration: 0.15 } }}
-                  className="group relative rounded-2xl bg-white border border-gray-200 overflow-hidden transition-all duration-300 shadow-sm"
+              {/* Eyebrow */}
+              <motion.div variants={fadeIn} className="mb-6">
+                <span 
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-full"
+                  style={{ 
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    color: colors.blueAccent
+                  }}
                 >
-                    <div className={`p-8 lg:p-10 ${isExpanded ? '' : 'hover:border-blue-500/50'}`}>
-                      {/* Hover glow effect */}
-                      {!isExpanded && (
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 opacity-60 group-hover:opacity-100 transition-opacity duration-300" />
-                      )}
-                      
-                      <div className="relative">
-                        {/* Icon with scroll rotation */}
-                        <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-6 ${!isExpanded && 'group-hover:scale-110'} transition-transform duration-150`}>
-                          <ScrollRotatingIcon icon={Icon} className="w-8 h-8 text-white" />
-                        </div>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: colors.blueAccent }} />
+                  Now available for businesses in the Philippines
+                </span>
+              </motion.div>
 
-                        <motion.h3 
-                          initial={{ opacity: 0, x: -30 }}
-                          whileInView={{ opacity: 1, x: 0 }}
-                          viewport={{ once: true, margin: "-50px" }}
-                          transition={{ duration: 1.0, delay: index * 0.15, ease: "easeOut" }}
-                          className="text-2xl font-bold text-slate-900 mb-3"
-                        >
-                          {feature.title}
-                        </motion.h3>
-                        
-                        <motion.p 
-                          initial={{ opacity: 0 }}
-                          whileInView={{ opacity: 1 }}
-                          viewport={{ once: true, margin: "-50px" }}
-                          transition={{ duration: 1.0, delay: index * 0.2, ease: "easeOut" }}
-                          className="text-blue-800 text-base leading-relaxed mb-4"
-                        >
-                          {feature.description}
-                        </motion.p>
+              {/* Main Headline */}
+              <motion.h1
+                variants={fadeIn}
+                className="mb-6 text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.1]"
+                style={{ color: colors.darkBlue }}
+              >
+                One platform.
+                <br />
+                <span style={{ color: colors.blueAccent }}>Everything you need.</span>
+              </motion.h1>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedFeature(isExpanded ? null : index)}
-                            className="flex items-center gap-2 text-blue-400 font-semibold group-hover:gap-3 transition-all hover:text-blue-300"
-                          >
-                            <span>{isExpanded ? 'Show less' : 'Learn more'}</span>
-                            <svg className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                          </button>
-                        </div>
-                    {/* Expanded content */}
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="border-t border-gray-200 bg-gray-50 px-8 lg:px-10 py-6"
-                      >
-                        <p className="text-blue-800 leading-relaxed mb-6">
-                          {details.details}
-                        </p>
-                        <div>
-                          <h4 className="text-lg font-semibold text-slate-900 mb-4">Key Features</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {details.features.map((feat, i) => (
-                                <motion.div 
-                                  key={i} 
-                                  initial={{ opacity: 0, x: -10 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ delay: i * 0.05 }}
-                                  className="flex items-start gap-3"
-                                >
-                                  <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  <span className="text-blue-700 text-sm">{feat}</span>
-                                </motion.div>
-                              ))}
-                            </div>
-                        </div>
-                      </motion.div>
-                    )}
-                      </div>
-                    </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        </div>
-      </section>
+              {/* Subheadline */}
+              <motion.p
+                variants={fadeIn}
+                className="max-w-2xl mx-auto mb-10 text-xl leading-relaxed"
+                style={{ color: colors.textMuted }}
+              >
+                Orders, payments, inventory, and your online store — all in one place. 
+                Built for businesses that want to grow without the complexity.
+              </motion.p>
 
-      {/* HOW IT WORKS - Integration Flow */}
-      <section className="py-32 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 border-t-2 border-blue-800">
-        <div className="max-w-7xl mx-auto px-6">
-            <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="text-center mb-16"
+              {/* CTA Buttons */}
+              <motion.div
+                variants={fadeIn}
+                className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8"
+              >
+                <Link
+                  href="/auth/signup"
+                  className="group inline-flex items-center gap-2 px-8 py-4 text-lg font-semibold text-white rounded-full transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                  style={{ backgroundColor: colors.blueAccent }}
+                >
+                  Start free trial
+                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                </Link>
+                <button
+                  onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="group inline-flex items-center gap-2 px-8 py-4 text-lg font-semibold rounded-full border-2 transition-all duration-300 hover:scale-105"
+                  style={{ 
+                    color: colors.text,
+                    borderColor: 'rgba(0,0,0,0.12)',
+                    backgroundColor: 'transparent'
+                  }}
+                >
+                  <Play className="w-5 h-5" />
+                  See how it works
+                </button>
+              </motion.div>
+
+              {/* Trust indicators */}
+              <motion.div
+                variants={fadeIn}
+                className="flex flex-wrap items-center justify-center gap-6 text-sm"
+                style={{ color: colors.textMuted }}
+              >
+                {['No credit card required', '14-day free trial', 'Cancel anytime'].map((item, i) => (
+                  <span key={i} className="flex items-center gap-2">
+                    <Check className="w-4 h-4" style={{ color: colors.blueAccent }} />
+                    {item}
+                  </span>
+                ))}
+              </motion.div>
+            </motion.div>
+          </div>
+          
+          {/* Scroll indicator */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1, duration: 0.5 }}
+            className="absolute bottom-10 left-1/2 -translate-x-1/2"
           >
-            <h2 className="text-4xl md:text-5xl font-extrabold mb-4 text-white">
-              Get started in minutes
-            </h2>
-            <p className="text-xl text-blue-200/80 max-w-2xl mx-auto">
-              Seriously. Most people are up and running in less than 30 minutes.
-            </p>
-          </motion.div>          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              className="w-6 h-10 rounded-full border-2 flex items-start justify-center pt-2"
+              style={{ borderColor: 'rgba(0,0,0,0.15)' }}
             >
-              <div className="space-y-6">
+              <div className="w-1 h-2 rounded-full" style={{ backgroundColor: colors.textMuted }} />
+            </motion.div>
+          </motion.div>
+        </header>
+
+        {/* ========== FEATURES SECTION - Clean grid ========== */}
+        <section id="features" className="py-32 relative" style={{ backgroundColor: colors.cream }}>
+          <div className="max-w-6xl mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-20"
+            >
+              <h2 
+                className="text-4xl md:text-5xl font-bold tracking-tight mb-5"
+                style={{ color: colors.darkBlue }}
+              >
+                Everything works together.
+              </h2>
+              <p 
+                className="text-xl max-w-2xl mx-auto"
+                style={{ color: colors.textMuted }}
+              >
+                Four powerful tools, one seamless experience. No integrations needed.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial="hidden"
+              whileInView="show"
+              variants={staggerContainer}
+              viewport={{ once: true, margin: "-50px" }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            >
+              {features.map((feature, index) => {
+                const Icon = feature.icon;
+                const isExpanded = expandedFeature === index;
+                const details = featureDetails[index];
+                
+                return (
+                  <motion.div
+                    key={index}
+                    variants={scaleIn}
+                    className="group relative rounded-3xl overflow-hidden transition-all duration-300"
+                    style={{ 
+                      backgroundColor: 'white',
+                      boxShadow: isExpanded ? '0 25px 50px -12px rgba(0, 0, 0, 0.1)' : '0 1px 3px rgba(0, 0, 0, 0.05)'
+                    }}
+                  >
+                    <div className="p-8 lg:p-10">
+                      {/* Icon */}
+                      <div 
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110"
+                        style={{ backgroundColor: 'rgba(37, 99, 235, 0.08)' }}
+                      >
+                        <Icon className="w-7 h-7" style={{ color: colors.blueAccent }} />
+                      </div>
+
+                      {/* Content */}
+                      <div className="mb-4">
+                        <span 
+                          className="text-xs font-semibold uppercase tracking-wider"
+                          style={{ color: colors.blueAccent }}
+                        >
+                          {feature.subtitle}
+                        </span>
+                      </div>
+                      
+                      <h3 
+                        className="text-2xl font-bold mb-3"
+                        style={{ color: colors.darkBlue }}
+                      >
+                        {feature.title}
+                      </h3>
+                      
+                      <p 
+                        className="text-base leading-relaxed mb-6"
+                        style={{ color: colors.textMuted }}
+                      >
+                        {feature.description}
+                      </p>
+
+                      {/* Learn more button */}
+                      <button
+                        onClick={() => setExpandedFeature(isExpanded ? null : index)}
+                        className="inline-flex items-center gap-2 text-sm font-semibold transition-all duration-200 hover:gap-3"
+                        style={{ color: colors.blueAccent }}
+                      >
+                        {isExpanded ? 'Show less' : 'Learn more'}
+                        <ArrowRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                      </button>
+
+                      {/* Expanded content */}
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="mt-8 pt-8"
+                          style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
+                        >
+                          <p 
+                            className="mb-6 leading-relaxed"
+                            style={{ color: colors.textMuted }}
+                          >
+                            {details.details}
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {details.features.map((feat, i) => (
+                              <motion.div 
+                                key={i} 
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="flex items-center gap-2"
+                              >
+                                <Check className="w-4 h-4 flex-shrink-0" style={{ color: colors.blueAccent }} />
+                                <span className="text-sm" style={{ color: colors.text }}>{feat}</span>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ========== HOW IT WORKS - Dark blue section ========== */}
+        <section className="py-32 relative" style={{ backgroundColor: colors.darkBlue }}>
+          {/* Subtle gradient overlay */}
+          <div 
+            className="absolute inset-0 pointer-events-none opacity-50"
+            style={{ 
+              background: 'radial-gradient(ellipse 100% 100% at 50% 0%, rgba(37, 99, 235, 0.2) 0%, transparent 50%)'
+            }}
+          />
+          
+          <div className="relative max-w-6xl mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-20"
+            >
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-5 text-white">
+                Up and running in minutes.
+              </h2>
+              <p className="text-xl text-white/60 max-w-2xl mx-auto">
+                Most businesses are live in under 30 minutes. Here&apos;s how.
+              </p>
+            </motion.div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+              {/* Steps */}
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="space-y-8"
+              >
                 {[
-                  { num: "1", title: "Add your products", desc: "Upload your menu or catalog. Includes prices, descriptions, photos." },
-                  { num: "2", title: "Pick a store design", desc: "Choose from our templates or customize your own. Takes minutes." },
-                  { num: "3", title: "Go live", desc: "Publish your store and start taking orders." },
-                  { num: "4", title: "Grow", desc: "Watch your sales come in. We'll handle the rest." },
+                  { num: "01", title: "Add your products", desc: "Import your catalog or add items manually. Photos, prices, descriptions." },
+                  { num: "02", title: "Enable online ordering", desc: "Activate ordering channels for web, mobile, and QR code ordering." },
+                  { num: "03", title: "Go live", desc: "Launch your ordering system with one click. Start accepting orders immediately." },
+                  { num: "04", title: "Watch it grow", desc: "Track sales, manage inventory, and scale your business." },
                 ].map((step, i) => (
                   <motion.div
                     key={i}
-                    initial={{ opacity: 0, x: -40 }}
+                    initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, margin: "-50px" }}
-                    transition={{ duration: 1.0, delay: i * 0.2, ease: "easeOut" }}
-                    whileHover={{ x: 12, transition: { duration: 0.15 } }}
-                    className="flex gap-4 group cursor-pointer"
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: i * 0.1 }}
+                    className="flex gap-6 group cursor-pointer"
                   >
-                    <motion.div 
-                      className="flex-shrink-0"
-                      animate={{ 
-                        scale: [1, 1.1, 1],
-                      }}
-                      transition={{
-                        duration: 3.5,
-                        repeat: Infinity,
-                        delay: i * 0.4
-                      }}
-                    >
-                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 group-hover:shadow-lg group-hover:shadow-blue-500/50 transition-shadow">
-                        <motion.span 
-                          className="text-white font-bold"
-                          initial={{ opacity: 0, scale: 0.5 }}
-                          whileInView={{ opacity: 1, scale: 1 }}
-                          viewport={{ once: true }}
-                          transition={{ delay: i * 0.2 + 0.3 }}
-                        >
-                          {step.num}
-                        </motion.span>
-                      </div>
-                    </motion.div>
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      whileInView={{ opacity: 1 }}
-                      viewport={{ once: true, margin: "-50px" }}
-                      transition={{ delay: i * 0.15 + 0.1 }}
-                    >
-                      <h4 className="text-lg font-semibold text-white mb-1 group-hover:text-cyan-300 transition">{step.title}</h4>
-                      <p className="text-blue-200/80">{step.desc}</p>
-                    </motion.div>
+                    <div className="flex-shrink-0">
+                      <span 
+                        className="block text-sm font-bold transition-colors duration-200"
+                        style={{ color: 'rgba(255,255,255,0.3)' }}
+                      >
+                        {step.num}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="text-xl font-semibold text-white mb-2 group-hover:text-blue-300 transition-colors">
+                        {step.title}
+                      </h4>
+                      <p className="text-white/60 leading-relaxed">
+                        {step.desc}
+                      </p>
+                    </div>
                   </motion.div>
                 ))}
-              </div>
-            </motion.div>
+              </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="relative"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-2xl blur-xl" />
-              <div className="relative bg-white rounded-2xl p-8 border border-gray-200 shadow-sm">
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "Orders today", value: "12", icon: Package },
-                    { label: "This month", value: "₱45k", icon: DollarSign },
-                    { label: "Happy customers", value: "287", icon: Heart },
-                    { label: "Time saved", value: "20hrs/wk", icon: Clock },
-                  ].map((stat, i) => {
-                    const StatIcon = stat.icon;
-                    return (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, scale: 0.75, y: 40 }}
-                        whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-50px" }}
-                        transition={{ duration: 0.9, delay: i * 0.18, ease: "easeOut" }}
-                        whileHover={{ 
-                          scale: 1.05,
-                          y: -8,
-                          boxShadow: "0 20px 40px rgba(59, 130, 246, 0.2)",
-                          transition: { duration: 0.15 }
-                        }}
-                        className="bg-white/90 rounded-lg p-4 border border-gray-200 hover:border-blue-500/50 transition cursor-pointer shadow-sm"
-                      >
-                        <motion.div 
-                          className="text-blue-400 mb-2"
-                          animate={{ 
-                            y: [0, -4, 0],
-                          }}
-                          transition={{
-                            duration: 4,
-                            repeat: Infinity,
-                            delay: i * 0.2
-                          }}
-                        >
-                          <StatIcon className="w-8 h-8" />
-                        </motion.div>
-                        <motion.div 
-                          className="text-2xl font-bold text-slate-900"
-                          initial={{ opacity: 0 }}
-                          whileInView={{ opacity: 1 }}
+              {/* Stats Card */}
+              <motion.div
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="relative"
+              >
+                <div 
+                  className="rounded-3xl p-8 lg:p-10"
+                  style={{ 
+                    backgroundColor: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-6">
+                    {[
+                      { label: "Orders today", value: "12", icon: Package },
+                      { label: "This month", value: "₱45k", icon: DollarSign },
+                      { label: "Happy customers", value: "287", icon: Heart },
+                      { label: "Time saved", value: "20hrs", icon: Clock },
+                    ].map((stat, i) => {
+                      const StatIcon = stat.icon;
+                      return (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, y: 20 }}
+                          whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }}
-                          transition={{ delay: i * 0.15 + 0.2 }}
+                          transition={{ duration: 0.4, delay: i * 0.1 }}
+                          className="p-6 rounded-2xl transition-all duration-300 hover:scale-105"
+                          style={{ 
+                            backgroundColor: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)'
+                          }}
                         >
-                          {stat.value}
+                          <StatIcon className="w-6 h-6 mb-3" style={{ color: colors.blueAccent }} />
+                          <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
+                          <div className="text-sm text-white/50">{stat.label}</div>
                         </motion.div>
-                        <div className="text-sm text-blue-700">{stat.label}</div>
-                      </motion.div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* FEATURES HIGHLIGHT - Detailed Benefits */}
-      <section className="py-32 border-t-2 border-gray-200 bg-gradient-to-br from-white via-blue-50/40 to-white">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-extrabold mb-4 text-slate-900">
-              Why people switch to BizCore
-            </h2>
-              <p className="text-xl text-blue-800 max-w-2xl mx-auto">
-                Simple. Works. Reliable. We don&apos;t overcomplicate things.
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { title: "Actually fast", desc: "Your customers don't wait. Neither does your POS." },
-              { title: "Works everywhere", desc: "Phone. Tablet. Computer. Looks great on all of them." },
-              { title: "Always in sync", desc: "One update. Everything changes. No confusion." },
-              { title: "Safe money", desc: "Bank-level security. You sleep well at night." },
-              { title: "Real support", desc: "Not a bot. Not an email robot. Real humans." },
-              { title: "Actually simple", desc: "Setup takes minutes. No IT degree required." },
-            ].map((benefit, i) => (
-              <BenefitCard key={i} title={benefit.title} desc={benefit.desc} index={i} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA SECTION */}
-      <section className="py-32 bg-gradient-to-br from-blue-700 via-indigo-800 to-blue-900 border-t-2 border-indigo-600/50">
-        <div className="max-w-4xl px-6 mx-auto text-center">
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            variants={container}
-            viewport={{ once: true }}
-            className="text-white"
-          >
-            <motion.h2
-              variants={fadeUp}
+        {/* ========== WHY BIZCORE - Benefits section ========== */}
+        <section className="py-32" style={{ backgroundColor: colors.creamDark }}>
+          <div className="max-w-6xl mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
               transition={{ duration: 0.6 }}
-              className="text-3xl md:text-4xl font-bold mb-4"
+              className="text-center mb-20"
             >
-              Ready to stop juggling?
-            </motion.h2>
-
-            <motion.p
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-lg text-blue-100 mb-8 max-w-2xl mx-auto"
-            >
-              Thousands of small businesses are already managing everything from one place.
-              You could be running your business better in about 30 minutes.
-            </motion.p>
-
-            <motion.div
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
-            >
-              <Link
-                href="/auth/signup"
-                className="bg-white text-blue-600 font-semibold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 inline-flex items-center gap-2"
+              <h2 
+                className="text-4xl md:text-5xl font-bold tracking-tight mb-5"
+                style={{ color: colors.darkBlue }}
               >
-                Start free (no card needed)
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </Link>
-              <Link
-href="#features"
-                className="border-2 border-white text-white font-semibold py-3 px-8 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-300"
+                Why businesses choose BizCore.
+              </h2>
+              <p 
+                className="text-xl max-w-2xl mx-auto"
+                style={{ color: colors.textMuted }}
               >
-                Learn more
-              </Link>
-            </motion.div>
-
-            <motion.div
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto"
-            >
-              {[
-                "14 days free",
-                "No credit card",
-                "Full access",
-                "Cancel anytime",
-              ].map((benefit, i) => (
-                <div key={i} className="flex items-center gap-2 text-blue-100">
-                  <svg className="w-5 h-5 text-blue-200 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm">{benefit}</span>
-                </div>
-              ))}
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ABOUT SECTION */}
-      <section id="about" className="py-32 bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950 border-t-2 border-blue-800/50">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            whileInView={{ opacity: 1, y: 0 }}
-viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-extrabold mb-4 text-white">
-              We get it
-            </h2>
-            <p className="text-xl text-blue-700 max-w-3xl mx-auto">
-              Running a business is complicated enough without software making it worse.
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.0 }}
-            className="space-y-6"
-            >
-              <p className="text-lg text-blue-700 leading-relaxed">
-                We started BizCore because we were frustrated too. Frustrated with software that&apos;s harder to use than running a cash register. Frustrated with vendors who don&apos;t care about helping you grow.
-              </p>
-              <p className="text-lg text-blue-700 leading-relaxed">
-                So we built something different. One place for everything. Easy to use. Honest pricing. Real support from people who actually know what you&apos;re dealing with.
-              </p>
-              <p className="text-lg text-blue-700 leading-relaxed">
-                Thousands of small businesses are already running better. Not because they&apos;re tech-savvy. Because BizCore is just... simpler.
+                Simple, reliable, and built for the way you actually work.
               </p>
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
+              initial="hidden"
+              whileInView="show"
+              variants={staggerContainer}
               viewport={{ once: true }}
-              transition={{ duration: 1.0 }}
-              className="grid grid-cols-2 gap-6"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
             >
               {[
-                { number: "5k+", label: "Happy businesses" },
-                { number: "99.9%", label: "Uptime" },
-                { number: "30min", label: "Setup time" },
-                { number: "24/7", label: "Support" },
-              ].map((stat, i) => (
+                { title: "Lightning fast", desc: "No lag, no waiting. Your business moves fast, so does BizCore." },
+                { title: "Works everywhere", desc: "Phone, tablet, or desktop. Always looks perfect, always works." },
+                { title: "Always in sync", desc: "One change updates everything. No more double entry." },
+                { title: "Bank-level security", desc: "Your data and your customers' payments are always protected." },
+                { title: "Human support", desc: "Real people who understand your business, not chatbots." },
+                { title: "Setup in minutes", desc: "No IT team needed. If you can use a smartphone, you can use this." },
+              ].map((benefit, i) => (
                 <motion.div
                   key={i}
-                  initial={{ opacity: 0, y: 40, scale: 0.9 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  viewport={{ once: true, margin: "-50px" }}
-                  transition={{ duration: 0.9, delay: i * 0.18, ease: "easeOut" }}
-                  whileHover={{ 
-                    scale: 1.1,
-                    y: -12,
-                    boxShadow: "0 25px 50px rgba(59, 130, 246, 0.3)",
-                    transition: { duration: 0.15 }
+                  variants={scaleIn}
+                  className="p-8 rounded-3xl transition-all duration-300 hover:scale-[1.02]"
+                  style={{ 
+                    backgroundColor: 'white',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
                   }}
-                  className="p-6 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 cursor-pointer transition-all"
                 >
-                  <motion.div 
-                    className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent"
-                    initial={{ opacity: 0, scale: 0.7 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true, margin: "-50px" }}
-                    transition={{ delay: i * 0.18 + 0.3 }}
+                  <h4 
+                    className="text-xl font-semibold mb-3"
+                    style={{ color: colors.darkBlue }}
                   >
-                    {stat.number}
-                  </motion.div>
-                  <motion.div 
-                    className="text-blue-700 mt-2"
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true, margin: "-50px" }}
-                    transition={{ delay: i * 0.12 + 0.3 }}
-                  >
-                    {stat.label}
-                  </motion.div>
+                    {benefit.title}
+                  </h4>
+                  <p style={{ color: colors.textMuted }} className="leading-relaxed">
+                    {benefit.desc}
+                  </p>
                 </motion.div>
               ))}
             </motion.div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        {/* ========== CTA SECTION - Clean & compelling ========== */}
+        <section className="py-32" style={{ backgroundColor: colors.blueAccent }}>
+          <div className="max-w-4xl px-6 mx-auto text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-white">
+                Ready to simplify your business?
+              </h2>
+              <p className="text-xl text-white/80 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Join thousands of businesses already running better with BizCore. 
+                Start your free trial today — no credit card required.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
+                <Link
+                  href="/auth/signup"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 text-lg font-semibold rounded-full transition-all duration-300 hover:scale-105"
+                  style={{ backgroundColor: 'white', color: colors.blueAccent }}
+                >
+                  Start free trial
+                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                </Link>
+                <a
+                  href="#features"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 text-lg font-semibold rounded-full border-2 border-white/30 text-white transition-all duration-300 hover:bg-white/10"
+                >
+                  Learn more
+                </a>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-white/70">
+                {['14-day free trial', 'No credit card', 'Cancel anytime', 'Full access'].map((item, i) => (
+                  <span key={i} className="flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ========== ABOUT SECTION ========== */}
+        <section id="about" className="py-32" style={{ backgroundColor: colors.cream }}>
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+              {/* Text Content */}
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+              >
+                <h2 
+                  className="text-4xl md:text-5xl font-bold tracking-tight mb-6"
+                  style={{ color: colors.darkBlue }}
+                >
+                  We built what we wished existed.
+                </h2>
+                <div className="space-y-6" style={{ color: colors.textMuted }}>
+                  <p className="text-lg leading-relaxed">
+                    Running a business is hard enough without software making it harder. 
+                    We were tired of tools that don&apos;t talk to each other, dashboards that 
+                    need a PhD to understand, and support that&apos;s anything but supportive.
+                  </p>
+                  <p className="text-lg leading-relaxed">
+                    So we built BizCore. One place for everything. Simple to use. 
+                    Honest pricing. Real humans who pick up when you call.
+                  </p>
+                  <p className="text-lg leading-relaxed">
+                    Thousands of businesses across the Philippines now run better because of it. 
+                    Not because they&apos;re tech experts — because they don&apos;t need to be.
+                  </p>
+                </div>
+              </motion.div>
+
+              {/* Stats Grid */}
+              <motion.div
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="grid grid-cols-2 gap-6"
+              >
+                {[
+                  { number: "5,000+", label: "Businesses" },
+                  { number: "99.9%", label: "Uptime" },
+                  { number: "30min", label: "Setup time" },
+                  { number: "24/7", label: "Support" },
+                ].map((stat, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                    className="p-8 rounded-3xl transition-all duration-300 hover:scale-[1.02]"
+                    style={{ 
+                      backgroundColor: 'white',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                    }}
+                  >
+                    <div 
+                      className="text-4xl font-bold mb-2"
+                      style={{ color: colors.blueAccent }}
+                    >
+                      {stat.number}
+                    </div>
+                    <div style={{ color: colors.textMuted }}>{stat.label}</div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </div>
+        </section>
 
       {/* PRICING SECTION */}
       <section id="pricing" className="py-32 bg-gradient-to-br from-white via-blue-50/30 to-white border-t-2 border-gray-200">
@@ -833,7 +774,7 @@ viewport={{ once: true, margin: "-100px" }}
           <motion.div
             initial="hidden"
             whileInView="show"
-            variants={container}
+            variants={staggerContainer}
             viewport={{ once: true }}
             className="grid grid-cols-1 md:grid-cols-3 gap-8"
           >
@@ -1148,14 +1089,14 @@ viewport={{ once: true, margin: "-100px" }}
 
       {/* FOOTER */}
       <footer id="contact" className="py-12 border-t-2 border-gray-300 bg-gradient-to-r from-gray-50 to-blue-50/50">
-    <div className="max-w-7xl mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-        >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div>
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+              <div>
                 <h4 className="font-semibold text-slate-900 mb-4">Product</h4>
                 <ul className="space-y-2 text-blue-700">
                   <li><Link href="/auth/signin" className="hover:text-blue-600 transition">Dashboard</Link></li>
@@ -1180,14 +1121,13 @@ viewport={{ once: true, margin: "-100px" }}
                 </ul>
               </div>
             </div>
-<div className="border-t border-gray-200 pt-8 text-center text-blue-700">
+            <div className="border-t border-gray-200 pt-8 text-center text-blue-700">
               <p>© {new Date().getFullYear()} BizCore. All rights reserved.</p>
-          </div>
-        </motion.div>
-</div>
+            </div>
+          </motion.div>
+        </div>
       </footer>
       </div>
-    </div>
-</PageWrapper>
+    </PageWrapper>
   );
 }

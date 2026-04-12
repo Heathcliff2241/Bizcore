@@ -49,12 +49,12 @@ export function FooterSection({
         }}
       />
 
-      <div className="text-center z-10 px-8">
-        <p className="text-xl text-gray-400 mb-3 tracking-wide font-light">
+      <div className="text-center z-10 px-4 sm:px-8 md:px-12">
+        <p className="text-lg sm:text-xl text-gray-400 mb-2 sm:mb-3 tracking-wide font-light">
           Proudly powered by
         </p>
         <h2
-          className="text-7xl font-black tracking-tight"
+          className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight"
           style={{
             background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #e879f9 75%, #60a5fa 100%)',
             backgroundSize: '200% 200%',
@@ -69,14 +69,14 @@ export function FooterSection({
           BizCore
         </h2>
         <div
-          className="mt-4 h-1 mx-auto rounded-full"
+          className="mt-3 sm:mt-4 h-1 mx-auto rounded-full"
           style={{
             width: '120px',
             background: 'linear-gradient(90deg, transparent 0%, #a78bfa 50%, transparent 100%)',
             boxShadow: '0 0 20px rgba(168, 85, 247, 0.6)',
           }}
         />
-        <p className="text-sm opacity-60 mt-4">
+        <p className="text-xs sm:text-sm opacity-60 mt-3 sm:mt-4">
           &copy; {new Date().getFullYear()} {companyName || 'Storefront'}. All rights reserved.
         </p>
       </div>

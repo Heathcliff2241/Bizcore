@@ -13,18 +13,15 @@ services:
   # Nginx Reverse Proxy (Security-Hardened)
   # ==========================
   nginx:
-    image: nginx:latest
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: bizcore_nginx
     restart: unless-stopped
-    # Run nginx directly to avoid the default entrypoint scripts which perform
-    # chown operations that can fail on Windows host-mounted filesystems
-    entrypoint: ["nginx", "-g", "daemon off;"]
-    user: root
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./public:/app/public:ro
@@ -66,26 +63,26 @@ services:
       - bizcore_network
 
   # ==========================
-  # PgBouncer Connection Pooler - DISABLED (configuration issues with edoburu/pgbouncer image)
-  # Consider using PgBouncer in production with proper config file management
+  # PgBouncer Connection Pooler
   # ==========================
-  # pgbouncer:
-  #   image: edoburu/pgbouncer:latest
-  #   container_name: bizcore_pgbouncer
-  #   restart: unless-stopped
-  #   environment:
-  #     DATABASE_URL: ${DATABASE_URL:-postgres://postgres:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/bizcore_dev}
-  #     POOL_MODE: transaction
-  #     MAX_CLIENT_CONN: 100
-  #     DEFAULT_POOL_SIZE: 20
-  #     LISTEN_PORT: 6432
-  #   ports:
-  #     - "6432:6432"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - bizcore_network
+  pgbouncer:
+    build:
+      context: ./pgbouncer
+      dockerfile: Dockerfile
+    container_name: bizcore_pgbouncer
+    restart: unless-stopped
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bizcore_network
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U postgres -h localhost -p 6432 -d bizcore_dev -c 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ==========================
   # pgAdmin (Database GUI) - DISABLED (using Prisma Studio instead)

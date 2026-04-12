@@ -15,7 +15,8 @@ import {
   ShoppingCartIcon,
   ArchiveBoxIcon,
   CreditCardIcon,
-  PaintBrushIcon
+  // PaintBrushIcon - removed (BrandStudio)
+  BarChart3Icon
 } from '@heroicons/react/24/outline'
 
 interface OnboardingStep {
@@ -369,15 +370,15 @@ function WelcomeStep() {
       <div>
         <h3 className="text-2xl font-bold text-blue-900 mb-3">Welcome to BizCore</h3>
         <p className="text-blue-700 text-lg leading-relaxed">
-          An all-in-one platform to manage POS, inventory, online ordering, and create your beautiful online storefront with BrandStudio. Let&apos;s get your system ready in just a few minutes.
+          An all-in-one platform to manage POS, inventory, and online ordering. Let&apos;s get your system ready in just a few minutes.
         </p>
       </div>
       <div className="pt-6 grid grid-cols-2 gap-4">
         {[
           { Icon: CreditCardIcon, label: 'POS System' },
-          { Icon: PaintBrushIcon, label: 'BrandStudio' },
           { Icon: ShoppingCartIcon, label: 'Online Ordering' },
-          { Icon: ArchiveBoxIcon, label: 'Inventory' }
+          { Icon: ArchiveBoxIcon, label: 'Inventory' },
+          { Icon: BarChart3Icon, label: 'Analytics' }
         ].map((item, i) => (
           <motion.div
             key={i}

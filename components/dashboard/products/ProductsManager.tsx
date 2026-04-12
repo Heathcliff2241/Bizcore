@@ -18,9 +18,15 @@ import {
   FunnelIcon,
   ExclamationTriangleIcon,
   CubeIcon,
-  TagIcon
+  TagIcon,
+  ArrowDownTrayIcon,
+  Cog6ToothIcon,
+  LightBulbIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import { useSettings } from '@/lib/settings-context'
+import { exportFromAPI } from '@/lib/csv-export'
+import { useRecentItems } from '@/hooks/useRecentItems'
 
 interface IngredientRecord {
   id: number
@@ -167,6 +173,12 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
   const [showVariantForm, setShowVariantForm] = useState(false)
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
   const [variantFormState, setVariantFormState] = useState<VariantFormState>(defaultVariantFormState)
+  const [exporting, setExporting] = useState(false)
+  const [showVariantIngredientsModal, setShowVariantIngredientsModal] = useState(false)
+  const [variantIngredientsMap, setVariantIngredientsMap] = useState<Record<number, Array<{ingredientId: number; quantity: number}>>>({})
+
+  // Recent items tracking
+  const { addRecentItem } = useRecentItems(subdomain)
 
   const querySuffix = useMemo(
     () => (subdomain ? `?subdomain=${encodeURIComponent(subdomain)}` : ''),
@@ -264,6 +276,16 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
 
   const handleEdit = useCallback((product: ProductRecord) => {
     setEditingProduct(product)
+    
+    // Track as recent item
+    addRecentItem({
+      id: product.id,
+      type: 'product',
+      title: product.name,
+      subtitle: product.category_name || 'Uncategorized',
+      url: subdomain ? `/dashboard/${subdomain}/catalog` : '/catalog',
+    })
+    
     setFormState({
       name: product.name,
       sku: product.sku ?? '',
@@ -293,7 +315,7 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
     setSelectedIngredientQuantity('')
     setImagePreview(product.image ?? null)
     setShowForm(true)
-  }, [])
+  }, [addRecentItem, subdomain])
 
   const handleDelete = useCallback(
     async (product: ProductRecord) => {
@@ -321,6 +343,36 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
     },
     [fetchProducts, productEndpoint]
   )
+
+  const handleExportCSV = useCallback(async () => {
+    if (!subdomain) {
+      alert('Subdomain is required for export')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const params = new URLSearchParams({
+        subdomain,
+        ...(selectedCategory !== 'all' && { category: selectedCategory }),
+        ...(searchTerm && { search: searchTerm }),
+      })
+
+      const result = await exportFromAPI(
+        `/api/tenant/export/products?${params}`,
+        `products_export_${subdomain}_${new Date().toISOString().split('T')[0]}`
+      )
+
+      if (!result.success) {
+        alert(result.error || 'Failed to export products')
+      }
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export products')
+    } finally {
+      setExporting(false)
+    }
+  }, [subdomain, selectedCategory, searchTerm])
 
   const handleImageChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -519,6 +571,9 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
           throw new Error(error.message || 'Failed to save variant')
         }
 
+        const responseData = await response.json()
+        const savedVariant = responseData.data
+
         // Update the product with new variant
         setEditingProduct((prev) => {
           if (!prev) return prev
@@ -534,11 +589,12 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
               )
             }
           } else {
+            // Use the real variant ID returned from the server
             const newVariant: ProductVariant = {
-              id: Date.now(),
-              name: variantFormState.name,
-              price: priceValue,
-              isActive: variantFormState.isActive
+              id: savedVariant.id,
+              name: savedVariant.name,
+              price: savedVariant.price,
+              isActive: savedVariant.isActive
             }
             return {
               ...prev,
@@ -684,25 +740,43 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
             Organize products and manage categories for {subdomain || 'your store'}
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={openCreateModal}
-          className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-semibold shadow-sm transition-shadow duration-200"
-          style={{ 
-            backgroundColor: theme.primary,
-            boxShadow: `0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px ${theme.primary}20`
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = `0 4px 12px ${theme.primary}40, 0 0 0 1px ${theme.primary}20`
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = `0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px ${theme.primary}20`
-          }}
-        >
-          <PlusIcon className="w-5 h-5" />
-          Add Product
-        </motion.button>
+        <div className="flex gap-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleExportCSV}
+            disabled={exporting || filteredProducts.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 border rounded-xl font-semibold shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ 
+              borderColor: `${theme.primary}40`,
+              color: theme.primary,
+              backgroundColor: 'white',
+              boxShadow: `0 1px 2px rgba(0,0,0,0.04)`
+            }}
+          >
+            <ArrowDownTrayIcon className="w-5 h-5" />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={openCreateModal}
+            className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-semibold shadow-sm transition-shadow duration-200"
+            style={{ 
+              backgroundColor: theme.primary,
+              boxShadow: `0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px ${theme.primary}20`
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = `0 4px 12px ${theme.primary}40, 0 0 0 1px ${theme.primary}20`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = `0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px ${theme.primary}20`
+            }}
+          >
+            <PlusIcon className="w-5 h-5" />
+            Add Product
+          </motion.button>
+        </div>
       </motion.div>
 
       {lowStockProducts.length > 0 && (
@@ -915,13 +989,34 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
                       ₱
                     </span>
                   </div>
-                  <span 
-                    className="font-bold text-lg"
-                    style={{ color: theme.primary }}
-                  >
-                    {formatCurrency(product.price)}
-                  </span>
-                  {Number.isFinite(product.cost_price) && product.cost_price > 0 && (
+                  {/* Show variant price range if variants exist, otherwise show base price */}
+                  {(product.productVariants?.length ?? 0) > 0 ? (
+                    <div className="flex flex-col">
+                      <span className="text-xs text-slate-500 font-medium">From</span>
+                      <span 
+                        className="font-bold text-lg"
+                        style={{ color: theme.primary }}
+                      >
+                        {formatCurrency(Math.min(...product.productVariants!.map(v => v.price)))}
+                        {product.productVariants!.length > 1 && (
+                          <span className="text-sm font-medium text-slate-500 ml-1">
+                            - {formatCurrency(Math.max(...product.productVariants!.map(v => v.price)))}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-blue-600 mt-0.5">
+                        {product.productVariants!.length} size{product.productVariants!.length > 1 ? 's' : ''} available
+                      </span>
+                    </div>
+                  ) : (
+                    <span 
+                      className="font-bold text-lg"
+                      style={{ color: theme.primary }}
+                    >
+                      {formatCurrency(product.price)}
+                    </span>
+                  )}
+                  {Number.isFinite(product.cost_price) && product.cost_price > 0 && (product.productVariants?.length ?? 0) === 0 && (
                     <span 
                       className="text-xs font-medium"
                       style={{ color: theme.text ? `${theme.text}70` : '#6b7280' }}
@@ -1065,17 +1160,27 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
                   </div>
 
                   <div>
-                    <label className="block mb-2 text-sm font-medium text-gray-700">Price (₱) *</label>
+                    <label className="block mb-2 text-sm font-medium text-gray-700">
+                      Price (₱) 
+                      {(editingProduct?.productVariants?.length ?? 0) > 0 ? (
+                        <span className="text-gray-500 font-normal text-xs ml-2">(Optional - using size variant pricing)</span>
+                      ) : (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      required
+                      required={(editingProduct?.productVariants?.length ?? 0) === 0}
                       value={formState.price}
                       onChange={(event) => setFormState((prev) => ({ ...prev, price: event.target.value }))}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50"
                       placeholder="0.00"
                     />
+                    {(editingProduct?.productVariants?.length ?? 0) > 0 && (
+                      <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><LightBulbIcon className="w-3.5 h-3.5" /> This product has size variants. Variant prices will be used instead of this base price.</p>
+                    )}
                   </div>
 
                   <div>
@@ -1247,57 +1352,262 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
                   )}
                 </div>
 
-                {/* Variants Section */}
-                {editingProduct && (
-                  <div className="border-t pt-6 mt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">Size Variants</h3>
-                      <button
-                        type="button"
-                        onClick={() => openVariantForm()}
-                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2"
-                      >
-                        <PlusIcon className="w-4 h-4" />
-                        Add Variant
-                      </button>
-                    </div>
+                {/* Size Variants Section - Redesigned */}
+                <div className="border-t pt-6 mt-6">
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Size Variants & Pricing</h3>
+                    <p className="text-sm text-gray-500">
+                      Enable size variants to set different prices for each size. Leave unchecked to use base price only.
+                    </p>
+                  </div>
 
-                    {(editingProduct.productVariants ?? []).length > 0 && (
-                      <div className="space-y-2">
-                        {editingProduct.productVariants?.map((variant) => (
-                          <div
-                            key={variant.id}
-                            className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200"
+                  {/* Use Variants Toggle */}
+                  <div className="mb-4">
+                    <label className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={(editingProduct?.productVariants?.length ?? 0) > 0 || showVariantForm}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setShowVariantForm(true)
+                          } else {
+                            // Clear all variants if unchecked
+                            if (editingProduct?.productVariants?.length && confirm('This will remove all size variants. Continue?')) {
+                              // Delete all variants via API
+                              editingProduct.productVariants?.forEach(v => handleDeleteVariant(v))
+                            }
+                            setShowVariantForm(false)
+                          }
+                        }}
+                        className="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-blue-900">Enable Size Variants</span>
+                        <p className="text-xs text-blue-700">Set different prices for Small, Medium, Large, etc.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Inline Variant Editor - Show when editing a product */}
+                  {(showVariantForm || (editingProduct?.productVariants?.length ?? 0) > 0) && (
+                    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-4 border border-slate-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-semibold text-slate-700">Configure Size Prices</p>
+                        {editingProduct && (
+                          <button
+                            type="button"
+                            onClick={() => openVariantForm()}
+                            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
                           >
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">{variant.name}</p>
-                              <p className="text-xs text-gray-500">₱{variant.price.toFixed(2)}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs px-2 py-1 rounded ${variant.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {variant.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openVariantForm(variant)}
-                                className="text-blue-600 hover:text-blue-800"
-                              >
-                                <PencilIcon className="w-4 h-4" />
-                              </button>
+                            <PlusIcon className="w-4 h-4" />
+                            Add Size
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Quick Add Presets */}
+                      {editingProduct && (editingProduct.productVariants?.length ?? 0) === 0 && (
+                        <div className="mb-4 p-3 bg-white rounded-lg border border-slate-200">
+                          <p className="text-xs font-medium text-slate-600 mb-2">Quick Add Common Sizes:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {['Small', 'Medium', 'Large', 'Extra Large', '8oz', '12oz', '16oz', 'Solo', 'Duo', 'Family'].map((sizeName) => {
+                              const exists = editingProduct.productVariants?.some(v => v.name.toLowerCase() === sizeName.toLowerCase())
+                              return (
+                                <button
+                                  key={sizeName}
+                                  type="button"
+                                  disabled={exists}
+                                  onClick={async () => {
+                                    // Prompt for price
+                                    const priceInput = prompt(`Enter price for ${sizeName}:`, formState.price || '0')
+                                    if (priceInput === null) return // User cancelled
+                                    
+                                    const price = parseFloat(priceInput)
+                                    if (isNaN(price) || price < 0) {
+                                      alert('Please enter a valid price')
+                                      return
+                                    }
+                                    
+                                    try {
+                                      const response = await fetch(`/api/products/${editingProduct.id}/variants${querySuffix}`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          name: sizeName,
+                                          price: price,
+                                          isActive: true
+                                        })
+                                      })
+                                      if (response.ok) {
+                                        const data = await response.json()
+                                        setEditingProduct(prev => prev ? {
+                                          ...prev,
+                                          productVariants: [...(prev.productVariants ?? []), data.data]
+                                        } : prev)
+                                      }
+                                    } catch (error) {
+                                      console.error('Failed to add variant:', error)
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                                    exists 
+                                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                      : 'bg-slate-100 text-slate-700 hover:bg-blue-100 hover:text-blue-700'
+                                  }`}
+                                >
+                                  + {sizeName}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Variant List with Inline Price Editing */}
+                      {(editingProduct?.productVariants?.length ?? 0) > 0 ? (
+                        <div className="space-y-2">
+                          {editingProduct?.productVariants?.map((variant) => (
+                            <div
+                              key={variant.id}
+                              className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition-colors"
+                            >
+                              {/* Size Name */}
+                              <div className="flex-1 min-w-0">
+                                <input
+                                  type="text"
+                                  defaultValue={variant.name}
+                                  onBlur={async (e) => {
+                                    const newName = e.target.value.trim()
+                                    if (newName && newName !== variant.name) {
+                                      try {
+                                        await fetch(`/api/products/${editingProduct.id}/variants/${variant.id}${querySuffix}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ name: newName, price: variant.price, isActive: variant.isActive })
+                                        })
+                                        setEditingProduct(prev => prev ? {
+                                          ...prev,
+                                          productVariants: prev.productVariants?.map(v => 
+                                            v.id === variant.id ? { ...v, name: newName } : v
+                                          )
+                                        } : prev)
+                                      } catch (error) {
+                                        console.error('Failed to update variant name:', error)
+                                      }
+                                    }
+                                  }}
+                                  className="w-full px-3 py-1.5 text-sm font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                                />
+                              </div>
+
+                              {/* Price Input */}
+                              <div className="w-32">
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₱</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    defaultValue={variant.price.toFixed(2)}
+                                    onBlur={async (e) => {
+                                      const newPrice = parseFloat(e.target.value)
+                                      if (!isNaN(newPrice) && newPrice !== variant.price) {
+                                        try {
+                                          await fetch(`/api/products/${editingProduct.id}/variants/${variant.id}${querySuffix}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ name: variant.name, price: newPrice, isActive: variant.isActive })
+                                          })
+                                          setEditingProduct(prev => prev ? {
+                                            ...prev,
+                                            productVariants: prev.productVariants?.map(v => 
+                                              v.id === variant.id ? { ...v, price: newPrice } : v
+                                            )
+                                          } : prev)
+                                        } catch (error) {
+                                          console.error('Failed to update variant price:', error)
+                                        }
+                                      }
+                                    }}
+                                    className="w-full pl-7 pr-3 py-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Active Toggle */}
+                              <label className="flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={variant.isActive}
+                                  onChange={async (e) => {
+                                    const newIsActive = e.target.checked
+                                    try {
+                                      await fetch(`/api/products/${editingProduct.id}/variants/${variant.id}${querySuffix}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name: variant.name, price: variant.price, isActive: newIsActive })
+                                      })
+                                      setEditingProduct(prev => prev ? {
+                                        ...prev,
+                                        productVariants: prev.productVariants?.map(v => 
+                                          v.id === variant.id ? { ...v, isActive: newIsActive } : v
+                                        )
+                                      } : prev)
+                                    } catch (error) {
+                                      console.error('Failed to update variant:', error)
+                                    }
+                                  }}
+                                  className="sr-only"
+                                />
+                                <div className={`w-9 h-5 rounded-full transition-colors ${variant.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                  <div className={`w-4 h-4 mt-0.5 ml-0.5 bg-white rounded-full shadow transition-transform ${variant.isActive ? 'translate-x-4' : ''}`} />
+                                </div>
+                              </label>
+
+                              {/* Delete Button */}
                               <button
                                 type="button"
                                 onClick={() => handleDeleteVariant(variant)}
-                                className="text-red-600 hover:text-red-800"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               >
                                 <TrashIcon className="w-4 h-4" />
                               </button>
+
+                              {/* Configure Ingredients Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingVariant(variant)
+                                  setShowVariantIngredientsModal(true)
+                                }}
+                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Configure ingredient quantities for this variant"
+                              >
+                                <Cog6ToothIcon className="w-4 h-4" />
+                              </button>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                          ))}
+                        </div>
+                      ) : !editingProduct ? (
+                        <p className="text-sm text-slate-500 text-center py-4">
+                          Save the product first, then you can add size variants.
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-500 text-center py-4">
+                          No sizes added yet. Use quick add above or click &quot;Add Size&quot;.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Base Price Note when variants exist */}
+                  {(editingProduct?.productVariants?.length ?? 0) > 0 && (
+                    <p className="mt-3 text-xs text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-start gap-2">
+                      <LightBulbIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span><strong>Note:</strong> When size variants are enabled, the base price above is ignored. Customers will select a size and pay the variant price.</span>
+                    </p>
+                  )}
+                </div>
 
                 <div className="border-t pt-6 mt-6"></div>
 
@@ -1449,6 +1759,129 @@ export function ProductsManager({ subdomain }: ProductsManagerProps) {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Variant Ingredients Modal */}
+        {showVariantIngredientsModal && editingVariant && editingProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowVariantIngredientsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">
+                  Ingredient Quantities for &quot;{editingVariant.name}&quot;
+                </h3>
+                <button
+                  onClick={() => setShowVariantIngredientsModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-600">
+                  Set ingredient quantities specific to this variant. Leave blank to use product-level quantities.
+                </p>
+
+                {(!editingProduct || !editingProduct.Ingredients || editingProduct.Ingredients.length === 0) ? (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    No ingredients added to this product yet. Add ingredients to the product first.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {editingProduct.Ingredients.map((pi) => {
+                      const currentQty = variantIngredientsMap[editingVariant.id]?.find(
+                        (vi) => vi.ingredientId === pi.id
+                      )?.quantity
+                      return (
+                        <div key={pi.id} className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">{pi.name}</p>
+                              <p className="text-xs text-gray-500">Unit: {pi.unit_of_measure}</p>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-600">
+                              Product: {pi.ProductIngredient?.quantity_required} {pi.unit_of_measure}
+                            </p>
+                          </div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Leave blank to use product qty"
+                            value={currentQty ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const qty = val ? parseFloat(val) : null
+                              setVariantIngredientsMap((prev) => ({
+                                ...prev,
+                                [editingVariant.id]: [
+                                  ...(prev[editingVariant.id] ?? []).filter((vi) => vi.ingredientId !== pi.id),
+                                  ...(qty !== null ? [{ ingredientId: pi.id, quantity: qty }] : [])
+                                ]
+                              }))
+                            }}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setShowVariantIngredientsModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      // Save variant ingredients to API
+                      const ingredientsToSave = variantIngredientsMap[editingVariant.id] ?? []
+                      try {
+                        for (const ing of ingredientsToSave) {
+                          await fetch(
+                            `/api/products/${editingProduct.id}/variants/${editingVariant.id}/ingredients${querySuffix}`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                ingredientId: ing.ingredientId,
+                                quantity: ing.quantity
+                              })
+                            }
+                          )
+                        }
+                        alert('Variant ingredients saved!')
+                        setShowVariantIngredientsModal(false)
+                      } catch (error) {
+                        console.error('Failed to save variant ingredients:', error)
+                        alert('Failed to save ingredient quantities')
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { customerAuthOptions } from '@/lib/customerAuth';
 import { prisma } from '@/lib/prisma';
 import { resolveTenant } from '@/lib/tenant';
 import { logActivity } from '@/lib/activityLogger';
+import { createNewCustomerNotification } from '@/lib/notifications';
 import bcrypt from 'bcryptjs';
 import { isRateLimited, recordFailedAttempt, clearFailedAttempts } from '@/lib/rateLimit';
 
 export async function GET(request: NextRequest) {
   // First try customer auth (for storefront customer data)
-  let session = await getServerSession(customerAuthOptions);
+  const session = await getServerSession(authOptions);
   
-  // If no customer session, try admin auth (for dashboard/admin access)
-  if (!session?.user?.id) {
-    session = await getServerSession(authOptions);
-  }
-
   if (!session?.user?.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
@@ -32,6 +27,18 @@ export async function GET(request: NextRequest) {
 
     if (!customer) {
       return NextResponse.json({ message: 'Customer not found' }, { status: 404 });
+    }
+
+    // If subdomain is specified, verify customer belongs to that tenant
+    if (subdomain) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { subdomain: subdomain.toLowerCase() }
+      });
+      
+      if (!tenant || customer.tenantId !== tenant.id) {
+        // Customer doesn't belong to this tenant
+        return NextResponse.json({ message: 'Customer not registered on this storefront' }, { status: 404 });
+      }
     }
 
     const address = typeof customer.address === 'string'
@@ -183,6 +190,15 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Send notification to tenant about new customer
+    await createNewCustomerNotification(
+      tenant.id,
+      result.customer.id,
+      `${result.customer.firstName} ${result.customer.lastName}`,
+      result.customer.email || 'No email',
+      tenant.subdomain
+    )
+
     // Clear signup rate-limit on success
     try {
       clearFailedAttempts(`signup_${email}`)
@@ -198,7 +214,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     // Try customer auth first (for self-updates)
-    let session = await getServerSession(customerAuthOptions);
+    const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });

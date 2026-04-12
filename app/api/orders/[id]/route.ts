@@ -9,6 +9,8 @@ import { logTenantActivity } from '@/lib/activityLogger'
 type LoadedOrder = OrderModel & {
   customer: Customer | null
   orderItems: Array<OrderItemModel & { product: Product }>
+  employee: { firstName: string; lastName: string; id: number; email: string; role: string } | null
+  paymentProof?: string | null
 }
 
 function formatOrder(order: LoadedOrder & Record<string, unknown> | null) {
@@ -39,8 +41,13 @@ function formatOrder(order: LoadedOrder & Record<string, unknown> | null) {
     payment_status: order.paymentStatus,
     payment_method: order.paymentMethod,
     amount_paid: order.amountPaid,
-    payment_proof: order.paymentProof || null,
+    paymentProof: (order as any).paymentProof || null,
     order_type: order.orderType,
+    employee_name: order.employee
+      ? `${order.employee.firstName} ${order.employee.lastName}`.trim()
+      : null,
+    employee_email: order.employee?.email || null,
+    employee_role: order.employee?.role || null,
     OrderItems: order.orderItems.map((item) => ({
       id: item.id,
       product_name: item.product.name,
@@ -71,6 +78,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       where: { id: Number(id), tenantId: tenant.id },
       include: {
         customer: true,
+        employee: true,
         orderItems: {
           include: { product: true }
         }
@@ -82,6 +90,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const formattedOrder = formatOrder(order)
+    
+    // Debug logging
+    console.log('GET /api/orders/[id] - Order details:', {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      paymentProofExists: !!order.paymentProof,
+      paymentProofLength: (order.paymentProof as string)?.length || 0,
+      paymentProofPreview: (order.paymentProof as string)?.substring(0, 50) + '...'
+    })
 
     return NextResponse.json({ success: true, data: { order: formattedOrder } })
   } catch (error) {
@@ -128,6 +145,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 })
     }
 
+    console.log(`[API] Updating order ${currentOrder.orderNumber} from ${currentOrder.status} to ${order_status || 'no change'}`)
+    console.log(`[API] Order has ${currentOrder.orderItems?.length ?? 0} items`)
+
     // Handle payment status
     if (payment_status) {
       updateData.paymentStatus = payment_status
@@ -162,107 +182,133 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         // ORDER COMPLETING: Convert reserved stock to permanent deduction
         console.log(`[Order ${currentOrder.orderNumber}] Completing: Converting reserved stock to permanent deduction`)
         
-        await prisma.$transaction(async (tx) => {
-          for (const orderItem of currentOrder.orderItems) {
-            const product = await tx.product.findUnique({ 
-              where: { id: orderItem.productId }, 
-              include: { productIngredients: true } 
-            })
-            
-            if (!product) {
-              throw new Error(`Product ${orderItem.productId} not found`)
-            }
+        try {
+          await prisma.$transaction(async (tx) => {
+            for (const orderItem of currentOrder.orderItems) {
+              console.log(`[Inventory] Processing item: ${orderItem.productId}`)
+              const product = await tx.product.findUnique({ 
+                where: { id: orderItem.productId }, 
+                include: { productIngredients: true } 
+              })
+              
+              if (!product) {
+                console.warn(`[Inventory] Product ${orderItem.productId} not found - skipping inventory deduction`)
+                continue
+              }
 
-            if (product.productIngredients && product.productIngredients.length > 0) {
-              for (const pi of product.productIngredients) {
-                const deductQty = pi.quantity * orderItem.quantity
-                const ingredient = await tx.ingredient.findUnique({ 
-                  where: { id: pi.ingredientId } 
-                })
-                
-                if (!ingredient) {
-                  throw new Error(`Ingredient ${pi.ingredientId} not found`)
-                }
-
-                // Validate reserved stock exists
-                if (ingredient.reservedStock < deductQty) {
-                  throw new Error(`Not enough reserved stock for ingredient ${ingredient.name}. Reserved: ${ingredient.reservedStock}, Required: ${deductQty}`)
-                }
-
-                // Move from reserved to permanent deduction:
-                // 1. Decrement from reservedStock
-                // 2. Decrement from currentStock
-                await tx.ingredient.update({
-                  where: { id: pi.ingredientId },
-                  data: {
-                    reservedStock: { decrement: deductQty },
-                    currentStock: { decrement: deductQty }
+              if (product.productIngredients && product.productIngredients.length > 0) {
+                for (const pi of product.productIngredients) {
+                  const deductQty = pi.quantity * orderItem.quantity
+                  const ingredient = await tx.ingredient.findUnique({ 
+                    where: { id: pi.ingredientId } 
+                  })
+                  
+                  if (!ingredient) {
+                    console.warn(`[Inventory] Ingredient ${pi.ingredientId} not found - skipping`)
+                    continue
                   }
-                })
 
-                // Log the permanent deduction
-                await tx.inventoryTransaction.create({
-                  data: {
-                    tenantId: tenant.id,
-                    ingredientId: pi.ingredientId,
-                    type: 'out',
-                    quantity: deductQty,
-                    reason: `Order ${currentOrder.orderNumber} - COMPLETED`,
-                    cost: Number(ingredient.costPerUnit ?? 0) * deductQty
+                  // Check if there's reserved stock to deduct
+                  if (ingredient.reservedStock < deductQty) {
+                    console.warn(`[Inventory Warning] Not enough reserved stock for ingredient ${ingredient.name}. Reserved: ${ingredient.reservedStock}, Required: ${deductQty}. Deducting available amount.`)
                   }
-                })
+
+                  // Deduct up to available reserved stock
+                  const deductAmount = Math.min(ingredient.reservedStock, deductQty)
+                  if (deductAmount === 0) {
+                    console.log(`[Inventory] No stock to deduct for ${ingredient.name}`)
+                    continue
+                  }
+
+                  // Move from reserved to permanent deduction:
+                  // 1. Decrement from reservedStock (clamp to 0)
+                  // 2. Decrement from currentStock (clamp to 0)
+                  const newReservedStock = Math.max(0, ingredient.reservedStock - deductAmount)
+                  const newCurrentStock = Math.max(0, (ingredient.currentStock ?? 0) - deductAmount)
+                  await tx.ingredient.update({
+                    where: { id: pi.ingredientId },
+                    data: {
+                      reservedStock: newReservedStock,
+                      currentStock: newCurrentStock
+                    }
+                  })
+
+                  // Log the permanent deduction
+                  await tx.inventoryTransaction.create({
+                    data: {
+                      tenantId: tenant.id,
+                      ingredientId: pi.ingredientId,
+                      type: 'out',
+                      quantity: deductAmount,
+                      reason: `Order ${currentOrder.orderNumber} - COMPLETED`,
+                      cost: Number(ingredient.costPerUnit ?? 0) * deductAmount
+                    }
+                  })
+                }
               }
             }
-          }
-        })
+          })
+        } catch (inventoryError) {
+          console.error(`[Inventory Error] Failed to process inventory for order ${currentOrder.orderNumber}:`, inventoryError)
+          throw inventoryError
+        }
       } else if (isCancelling) {
         // ORDER CANCELLING: Release reserved stock back to available
         console.log(`[Order ${currentOrder.orderNumber}] Cancelling: Releasing reserved stock`)
         
-        await prisma.$transaction(async (tx) => {
-          for (const orderItem of currentOrder.orderItems) {
-            const product = await tx.product.findUnique({
-              where: { id: orderItem.productId },
-              include: { productIngredients: true }
-            })
-            
-            if (!product) {
-              throw new Error(`Product ${orderItem.productId} not found`)
-            }
+        try {
+          await prisma.$transaction(async (tx) => {
+            for (const orderItem of currentOrder.orderItems) {
+              const product = await tx.product.findUnique({
+                where: { id: orderItem.productId },
+                include: { productIngredients: true }
+              })
+              
+              if (!product) {
+                console.warn(`[Inventory] Product ${orderItem.productId} not found - skipping release`)
+                continue
+              }
 
-            if (product.productIngredients && product.productIngredients.length > 0) {
-              for (const pi of product.productIngredients) {
-                const releaseQty = pi.quantity * orderItem.quantity
-                const ingredient = await tx.ingredient.findUnique({
-                  where: { id: pi.ingredientId }
-                })
-                
-                if (!ingredient) {
-                  throw new Error(`Ingredient ${pi.ingredientId} not found`)
+              if (product.productIngredients && product.productIngredients.length > 0) {
+                for (const pi of product.productIngredients) {
+                  const releaseQty = pi.quantity * orderItem.quantity
+                  const ingredient = await tx.ingredient.findUnique({
+                    where: { id: pi.ingredientId }
+                  })
+                  
+                  if (!ingredient) {
+                    console.warn(`[Inventory] Ingredient ${pi.ingredientId} not found - skipping release`)
+                    continue
+                  }
+
+                  // Release reserved stock (just decrement reservedStock, currentStock unchanged)
+                  // Ensure reservedStock doesn't go negative
+                  const newReservedStock = Math.max(0, ingredient.reservedStock - releaseQty)
+                  await tx.ingredient.update({
+                    where: { id: pi.ingredientId },
+                    data: {
+                      reservedStock: newReservedStock
+                    }
+                  })
+
+                  // Log the release
+                  await tx.inventoryTransaction.create({
+                    data: {
+                      tenantId: tenant.id,
+                      ingredientId: pi.ingredientId,
+                      type: 'reserved_released',
+                      quantity: releaseQty,
+                      reason: `Order ${currentOrder.orderNumber} - CANCELLED`
+                    }
+                  })
                 }
-
-                // Release reserved stock (just decrement reservedStock, currentStock unchanged)
-                await tx.ingredient.update({
-                  where: { id: pi.ingredientId },
-                  data: {
-                    reservedStock: { decrement: releaseQty }
-                  }
-                })
-
-                // Log the release
-                await tx.inventoryTransaction.create({
-                  data: {
-                    tenantId: tenant.id,
-                    ingredientId: pi.ingredientId,
-                    type: 'reserved_released',
-                    quantity: releaseQty,
-                    reason: `Order ${currentOrder.orderNumber} - CANCELLED`
-                  }
-                })
               }
             }
-          }
-        })
+          })
+        } catch (inventoryError) {
+          console.error(`[Inventory Error] Failed to release inventory for order ${currentOrder.orderNumber}:`, inventoryError)
+          throw inventoryError
+        }
       }
     }
 

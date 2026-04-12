@@ -1,53 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import crypto from 'crypto'
-import { sendEmail } from '@/lib/email'
-import { isRateLimited, recordFailedAttempt } from '@/lib/rateLimit'
+import { sendOtpEmail } from '@/lib/email'
+import { generateOtp, maskEmail, isValidEmail, storeOTP } from '@/lib/otp'
+import { rateLimits } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
-    if (!email) {
+    
+    if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
-    const rateLimitKey = `forgot_${email}`
-    if (isRateLimited(rateLimitKey, 10, 900000)) {
-      recordFailedAttempt(rateLimitKey)
-      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
+    const normalizedEmail = email.toLowerCase().trim()
+
+    // Validate email format
+    if (!isValidEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
     }
 
+    // Check rate limit: 3 OTP requests per email per hour
+    const rateLimitResult = rateLimits.otpRequest(normalizedEmail)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many password reset requests',
+          message: 'Please try again later',
+          retryAfter: rateLimitResult.retryAfter
+        },
+        { status: 429 }
+      )
+    }
+
+    // Find user
     const user = await prisma.user.findFirst({
       where: {
         email: {
-          equals: email,
+          equals: normalizedEmail,
           mode: 'insensitive'
         }
       }
     })
+
     if (!user) {
       // Don't give away whether the user exists - return 200 OK
-      return NextResponse.json({ success: true })
+      return NextResponse.json({
+        success: true,
+        message: `If an account exists for ${maskEmail(normalizedEmail)}, you will receive an OTP`,
+        maskedEmail: maskEmail(normalizedEmail),
+        expiresIn: 900
+      })
     }
 
-    const token = crypto.randomBytes(32).toString('hex')
-    const expires = new Date(Date.now() + 1000 * 60 * 60) // 1 hour
+    // Generate OTP
+    const otp = generateOtp(6)
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordResetToken: token, passwordResetExpires: expires }
-    })
+    // Store OTP in database with 'tenant' type (password reset uses same OTP system as sign-in)
+    await storeOTP(normalizedEmail, otp, 'tenant')
 
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset?token=${token}`
+    // Send OTP email with 'reset' purpose for password reset messaging
+    try {
+      await sendOtpEmail(normalizedEmail, otp, 15, 'reset')
+    } catch (emailError) {
+      console.error('Failed to send reset OTP email:', emailError)
+      return NextResponse.json(
+        { error: 'Failed to send OTP email. Please try again.' },
+        { status: 500 }
+      )
+    }
 
-    await sendEmail({
-      to: user.email,
-      subject: 'Reset your password',
-      text: `Click the link to reset your password: ${resetUrl}`,
-      html: `<p>Click the link to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`
-    })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(
+      {
+        success: true,
+        message: `OTP sent to ${maskEmail(normalizedEmail)}`,
+        maskedEmail: maskEmail(normalizedEmail),
+        email: normalizedEmail,
+        expiresIn: 900 // 15 minutes in seconds
+      },
+      { status: 200 }
+    )
   } catch (err) {
     console.error('Forgot password error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })

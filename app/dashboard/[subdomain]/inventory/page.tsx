@@ -1,4 +1,4 @@
-import { InventoryManager } from '@/components/dashboard/inventory/InventoryManager'
+import { redirect } from 'next/navigation'
 
 interface InventoryPageProps {
   params: Promise<{
@@ -8,5 +8,5 @@ interface InventoryPageProps {
 
 export default async function InventoryPage({ params }: InventoryPageProps) {
   const { subdomain } = await params
-  return <InventoryManager subdomain={subdomain} />
+  redirect(`/dashboard/${subdomain}/catalog?tab=inventory`)
 }

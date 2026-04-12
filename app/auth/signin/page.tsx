@@ -12,9 +12,11 @@ function SignInForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [demoMode, setDemoMode] = useState(false)
   const [rateLimitTime, setRateLimitTime] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
+  const [showOtpStep, setShowOtpStep] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const router = useRouter()
   const searchParams = useSearchParams()
   const { status, data: session } = useSession()
@@ -163,60 +165,77 @@ function SignInForm() {
     setLoading(true)
 
     try {
-      // Sign in with NextAuth
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: '/dashboard'
+      // First, check if the user exists
+      const checkUserResponse = await fetch('/api/auth/signin/check-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
       })
 
-      if (result?.error) {
-        console.log('[SIGNIN] Auth error:', result.error)
-        
-        if (result.error === 'Too many failed attempts. Please try again later.') {
-          // Rate limited - fetch accurate time remaining from server
-          try {
-            const response = await fetch(`/api/auth/rate-limit?email=${encodeURIComponent(email)}`)
-            if (response.ok) {
-              const data = await response.json()
-              const timeRemaining = data.timeRemaining || 900 // fallback to 15 minutes
-              
-              // Sync to localStorage for client-side countdown
-              if (typeof window !== 'undefined') {
-                const rateLimitKey = `auth_${email}`
-                const now = Date.now()
-                const resetTime = now + (timeRemaining * 1000)
-                const stored = localStorage.getItem('bizcore_rate_limit')
-                const allRecords = stored ? JSON.parse(stored) : {}
-                allRecords[rateLimitKey] = { count: 6, resetTime }
-                localStorage.setItem('bizcore_rate_limit', JSON.stringify(allRecords))
-              }
-              
-              setRateLimitTime(timeRemaining)
-              setError(`Too many failed attempts. Try again in ${timeRemaining} seconds.`)
-            } else {
-              // Fallback if API fails
-              setRateLimitTime(900)
-              setError('Too many failed attempts. Try again in 15 minutes.')
-            }
-          } catch (err) {
-            console.error('[SIGNIN] Failed to fetch rate limit time:', err)
-            setRateLimitTime(900)
-            setError('Too many failed attempts. Try again in 15 minutes.')
-          }
-        } else if (result.error.includes('CredentialsSignin')) {
-          console.log('[SIGNIN] Regular auth failure')
-          setError('Invalid email or password.')
+      const checkUserData = await checkUserResponse.json()
+
+      if (!checkUserData.exists) {
+        setError(checkUserData.message || 'Account not found. Please check your email and try again.')
+        setLoading(false)
+        return
+      }
+
+      // User exists, now request OTP
+      const otpResponse = await fetch('/api/auth/signin/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+
+      if (!otpResponse.ok) {
+        const data = await otpResponse.json()
+        // If rate limited, set the countdown timer
+        if (data.retryAfter) {
+          setRateLimitTime(data.retryAfter)
         } else {
-          setError(result.error || 'Login failed. Please try again.')
+          setError(data.message || 'Failed to send OTP. Please try again.')
         }
         setLoading(false)
         return
       }
 
+      // OTP sent successfully
+      setUserEmail(email)
+      setShowOtpStep(true)
+      setOtp('')
+      setLoading(false)
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMsg || 'Failed to request OTP. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      // Sign in using OTP provider directly
+      console.log('🔐 SignIn: Calling signIn with otp provider', { email: userEmail, otp })
+      const result = await signIn('otp', {
+        email: userEmail,
+        otp: otp,
+        redirect: false,
+        callbackUrl: '/dashboard'
+      })
+
+      if (result?.error) {
+        console.error('❌ SignIn Error:', result.error)
+        setError(result.error || 'Invalid OTP. Please try again.')
+        setLoading(false)
+        return
+      }
+
       if (result?.ok) {
-        // Fetch the JWT token from session
+        console.log('✅ SignIn Successful, fetching session...')
+        // Fetch the latest session
         const session = await fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json())
         
         if (session?.user) {
@@ -224,18 +243,25 @@ function SignInForm() {
           const userRole = session.user.role || 'user'
                     
           if (userRole === 'admin') {
-            // Route admin to super admin dashboard
-            // Clear any tenant-related data
             localStorage.removeItem('tenant')
             localStorage.removeItem('auth_token')
             router.push('/admin')
           } else {
-            // Route tenant users to their dashboard
-            const tenant = await fetchAndStoreTenant()
-            if (tenant) {
-              router.push(`/dashboard/${tenant.subdomain || tenant.name}`)
+            // Store tenant in localStorage if available
+            if (session.user.tenantId && session.user.subdomain) {
+              localStorage.setItem('tenant', JSON.stringify({
+                id: session.user.tenantId,
+                subdomain: session.user.subdomain,
+                name: session.user.subdomain
+              }))
+              router.push(`/dashboard/${session.user.subdomain}`)
             } else {
-              router.push('/dashboard')
+              const tenant = await fetchAndStoreTenant()
+              if (tenant) {
+                router.push(`/dashboard/${tenant.subdomain || tenant.name}`)
+              } else {
+                router.push('/dashboard')
+              }
             }
           }
         } else {
@@ -244,64 +270,7 @@ function SignInForm() {
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'An error occurred'
-      
-      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        setError('Connection failed. Please check if the server is running and accessible.')
-      } else if (errorMsg.includes('404')) {
-        setError('API endpoint not found. Please verify the server configuration.')
-      } else if (errorMsg.includes('500')) {
-        setError('Server error. Please try again later.')
-      } else {
-        setError(`Login error: ${errorMsg}`)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDemoAccess = async () => {
-    setError('')
-    setLoading(true)
-    setDemoMode(true)
-
-    try {
-      const result = await signIn('credentials', {
-        email: 'demo@brandstudio.com',
-        password: 'password',
-        redirect: false,
-        callbackUrl: '/dashboard'
-      })
-
-      if (result?.error) {
-        setError('Demo access unavailable. Please contact support.')
-        setDemoMode(false)
-      } else if (result?.ok) {
-        const session = await fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json())
-        if (session?.user) {
-          // Smart role-based routing for demo
-          const userRole = session.user.role || 'user'
-                    
-          if (userRole === 'admin') {
-            // Clear tenant data for admin
-            localStorage.removeItem('tenant')
-            localStorage.removeItem('auth_token')
-            router.push('/admin')
-          } else {
-            const tenant = await fetchAndStoreTenant()
-            if (tenant) {
-              router.push(`/dashboard/${tenant.subdomain || tenant.name}`)
-            } else {
-              router.push('/dashboard')
-            }
-          }
-        } else {
-          router.push('/dashboard')
-        }
-      }
-    } catch {
-      setError('An error occurred. Please try again.')
-      setDemoMode(false)
-    } finally {
+      setError(errorMsg || 'OTP verification failed.')
       setLoading(false)
     }
   }
@@ -365,93 +334,142 @@ function SignInForm() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
             >
-            <form className="space-y-5" onSubmit={handleSubmit}>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
-                >
-                  {error}
-                </motion.div>
-              )}
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className={inputClasses}
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-              >
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className={inputClasses}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              </motion.div>
-
-              <motion.button
-                type="submit"
-                disabled={loading || demoMode}
-                whileTap={{ scale: 0.97 }}
-                whileHover={{ scale: 1.02 }}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
-              >
-                {loading && demoMode ? 'Starting Demo...' : loading ? 'Signing in...' : 'Sign In'}
-              </motion.button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-blue-200"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-blue-600 font-medium">Or try demo</span>
-                </div>
-              </div>
-
-              <motion.button
-                type="button"
-                onClick={handleDemoAccess}
-                disabled={loading}
-                whileTap={{ scale: 0.97 }}
-                whileHover={{ scale: 1.02 }}
-                className="w-full py-3 border-2 border-blue-600 text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {loading && demoMode ? 'Starting Demo...' : 'Explore Demo Dashboard'}
-              </motion.button>
-
-              <div className="text-center pt-4">
-                <p className="text-sm text-blue-700">
-                  Don&apos;t have an account?{' '}
-                  <Link
-                    href="/auth/signup"
-                    className="text-blue-600 font-semibold hover:underline"
+            {showOtpStep ? (
+              <form className="space-y-5" onSubmit={handleVerifyOtp}>
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
                   >
-                    Create one
+                    {error}
+                  </motion.div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+                  <p className="text-blue-900 font-medium">Verification Code Sent</p>
+                  <p className="text-blue-700 mt-1">Enter the 6-digit code sent to {userEmail}</p>
+                </div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                <input
+                  id="otp"
+                  name="otp"
+                  type="text"
+                  maxLength={6}
+                  required
+                  className={inputClasses}
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                />
+                </motion.div>
+
+                <motion.button
+                  type="submit"
+                  disabled={loading || otp.length !== 6}
+                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.02 }}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
+                >
+                  {loading ? 'Verifying...' : 'Verify Code'}
+                </motion.button>
+
+                <motion.button
+                  type="button"
+                  onClick={() => {
+                    setShowOtpStep(false)
+                    setOtp('')
+                    setUserEmail('')
+                    setError('')
+                  }}
+                  className="w-full py-2 text-blue-600 text-sm font-semibold hover:underline"
+                >
+                  Back to Sign In
+                </motion.button>
+              </form>
+            ) : (
+              <form className="space-y-5" onSubmit={handleSubmit}>
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-red-600 text-sm font-semibold text-center p-3 bg-red-50 border border-red-200 rounded-lg"
+                  >
+                    {error}
+                  </motion.div>
+                )}
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  className={inputClasses}
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  className={inputClasses}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                </motion.div>
+
+                <div className="text-right">
+                  <Link
+                    href="/auth/forgot"
+                    className="text-sm text-blue-600 font-semibold hover:underline"
+                  >
+                    Forgot password?
                   </Link>
-                </p>
-              </div>
-            </form>
+                </div>
+
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.02 }}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-500/40"
+                >
+                  {loading ? 'Sending code...' : 'Continue'}
+                </motion.button>
+
+                <div className="text-center pt-4">
+                  <p className="text-sm text-blue-700">
+                    Don&apos;t have an account?{' '}
+                    <Link
+                      href="/auth/signup"
+                      className="text-blue-600 font-semibold hover:underline"
+                    >
+                      Create one
+                    </Link>
+                  </p>
+                </div>
+              </form>
+            )}
             </motion.div>
             </motion.div>
         </div>

@@ -41,7 +41,7 @@ export function RecentlyViewedProducts({ storefront, limit = 5 }: RecentlyViewed
       <h3 className="text-xl font-bold mb-4">Recently Viewed</h3>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {products.map((product) => {
-          const resolved = resolveStorefrontHref(`/menu/${product.slug}`, storefront)
+          const resolved = resolveStorefrontHref(`/home/${product.slug}`, storefront)
           return (
             <motion.div
               key={`${product.id}-${product.timestamp}`}

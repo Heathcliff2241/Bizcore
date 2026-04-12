@@ -33,10 +33,12 @@ interface Subscription {
   plan: string
   price: number
   billingCycle: 'monthly' | 'annual'
-  status: 'active' | 'cancelled' | 'expired'
+  status: 'active' | 'trial' | 'cancelled' | 'expired'
   startDate: string
   renewalDate: string
   createdAt: string
+  daysRemaining?: number
+  lastLogin?: string
 }
 
 interface PendingPayment {
@@ -45,10 +47,13 @@ interface PendingPayment {
   planName: string
   amount: number
   currency: string
-  gcashTransactionId: string
+  gcashTransactionId: string | null
   submittedAt: string
   expiresAt: string
   status: string
+  type?: 'payment' | 'request'
+  requestType?: 'reactivation' | 'upgrade'
+  requestId?: number
 }
 
 const containerVariants = {
@@ -166,6 +171,7 @@ export default function SubscriptionsPage() {
       name: plan.name,
       price: plan.price,
       description: plan.description,
+      features: plan.features,
     })
   }
 
@@ -470,10 +476,13 @@ export default function SubscriptionsPage() {
                             Status
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">
-                            Started
+                            Days Left
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">
                             Renewal
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">
+                            Last Login
                           </th>
                         </tr>
                       </thead>
@@ -497,20 +506,31 @@ export default function SubscriptionsPage() {
                               <span
                                 className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
                                   sub.status === 'active'
-                                    ? 'bg-blue-100 text-blue-800'
+                                    ? 'bg-green-100 text-green-800'
+                                    : sub.status === 'trial'
+                                    ? 'bg-slate-100 text-slate-800'
                                     : sub.status === 'cancelled'
                                     ? 'bg-red-100 text-red-800'
-                                    : 'bg-slate-100 text-slate-800'
+                                    : 'bg-yellow-100 text-yellow-800'
                                 }`}
                               >
                                 {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-600">
-                              {new Date(sub.startDate).toLocaleDateString()}
+                              {sub.daysRemaining ? (
+                                <span className={sub.daysRemaining <= 7 ? 'text-red-600 font-medium' : ''}>
+                                  {sub.daysRemaining} days
+                                </span>
+                              ) : (
+                                '—'
+                              )}
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-600">
-                              {new Date(sub.renewalDate).toLocaleDateString()}
+                              {sub.renewalDate ? new Date(sub.renewalDate).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {sub.lastLogin ? new Date(sub.lastLogin).toLocaleDateString() : 'Never'}
                             </td>
                           </motion.tr>
                         ))}
@@ -535,12 +555,13 @@ export default function SubscriptionsPage() {
                   <div className="space-y-4">
                     {payments.map((payment) => {
                       const isExpired = new Date(payment.expiresAt) < new Date()
+                      const isRequest = payment.type === 'request'
                       return (
                         <motion.div
                           key={payment.id}
                           variants={itemVariants}
                           className={`bg-white rounded-lg shadow-sm border-2 transition-all hover:shadow-md p-6 ${
-                            isExpired ? 'border-red-200 bg-red-50/30' : 'border-amber-200'
+                            isExpired ? 'border-red-200 bg-red-50/30' : isRequest ? 'border-blue-200' : 'border-amber-200'
                           }`}
                         >
                           {/* Header with Plan and Status */}
@@ -553,12 +574,16 @@ export default function SubscriptionsPage() {
                                 <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                   isExpired 
                                     ? 'bg-red-100 text-red-800' 
+                                    : isRequest
+                                    ? 'bg-blue-100 text-blue-800'
                                     : 'bg-amber-100 text-amber-800'
                                 }`}>
-                                  {isExpired ? 'EXPIRED' : 'Pending Verification'}
+                                  {isExpired ? 'EXPIRED' : isRequest ? 'REQUEST PENDING' : 'PAYMENT PENDING'}
                                 </span>
                               </div>
-                              <p className="text-sm text-slate-600">Payment ID: {payment.id}</p>
+                              <p className="text-sm text-slate-600">
+                                {isRequest ? 'Request ID:' : 'Payment ID:'} {isRequest ? payment.requestId : payment.id}
+                              </p>
                             </div>
                             {/* Amount Badge */}
                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-3 text-right">
@@ -571,80 +596,135 @@ export default function SubscriptionsPage() {
 
                           {/* Details Grid */}
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5 pb-5 border-b border-slate-200">
-                            <div>
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                GCash Reference
-                              </p>
-                              <p className="text-sm font-mono bg-slate-100 rounded px-2 py-1 text-slate-900 break-all">
-                                {payment.gcashTransactionId}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Submitted
-                              </p>
-                              <p className="text-sm text-slate-700">
-                                {new Date(payment.submittedAt).toLocaleDateString()}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {new Date(payment.submittedAt).toLocaleTimeString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Expires
-                              </p>
-                              <p className={`text-sm font-semibold ${
-                                isExpired ? 'text-red-600' : 'text-slate-700'
-                              }`}>
-                                {new Date(payment.expiresAt).toLocaleDateString()}
-                              </p>
-                              <p className={`text-xs ${isExpired ? 'text-red-600' : 'text-slate-500'}`}>
-                                {new Date(payment.expiresAt).toLocaleTimeString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Status
-                              </p>
-                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                                isExpired 
-                                  ? 'bg-red-100 text-red-800' 
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}>
-                                {isExpired ? 'Expired' : 'Pending'}
-                              </span>
-                            </div>
+                            {isRequest ? (
+                              <>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Request Type
+                                  </p>
+                                  <p className="text-sm font-medium text-slate-700 capitalize">
+                                    {payment.requestType}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Requested At
+                                  </p>
+                                  <p className="text-sm text-slate-700">
+                                    {new Date(payment.submittedAt).toLocaleDateString()}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {new Date(payment.submittedAt).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Expires
+                                  </p>
+                                  <p className={`text-sm font-semibold ${
+                                    isExpired ? 'text-red-600' : 'text-slate-700'
+                                  }`}>
+                                    {new Date(payment.expiresAt).toLocaleDateString()}
+                                  </p>
+                                  <p className={`text-xs ${isExpired ? 'text-red-600' : 'text-slate-500'}`}>
+                                    {new Date(payment.expiresAt).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Status
+                                  </p>
+                                  <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                    Request Pending
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    GCash Reference
+                                  </p>
+                                  <p className="text-sm font-mono bg-slate-100 rounded px-2 py-1 text-slate-900 break-all">
+                                    {payment.gcashTransactionId}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Submitted
+                                  </p>
+                                  <p className="text-sm text-slate-700">
+                                    {new Date(payment.submittedAt).toLocaleDateString()}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {new Date(payment.submittedAt).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Expires
+                                  </p>
+                                  <p className={`text-sm font-semibold ${
+                                    isExpired ? 'text-red-600' : 'text-slate-700'
+                                  }`}>
+                                    {new Date(payment.expiresAt).toLocaleDateString()}
+                                  </p>
+                                  <p className={`text-xs ${isExpired ? 'text-red-600' : 'text-slate-500'}`}>
+                                    {new Date(payment.expiresAt).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    Status
+                                  </p>
+                                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                                    isExpired 
+                                      ? 'bg-red-100 text-red-800' 
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {isExpired ? 'Expired' : 'Pending'}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           {/* Action Buttons */}
                           <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={() => openPaymentDetailsView(payment)}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors font-medium"
-                              title="View payment details and proof"
-                            >
-                              <EyeIcon className="w-5 h-5" />
-                              View Details
-                            </button>
-                            <button
-                              onClick={() => openPaymentModal(payment, 'verify')}
-                              disabled={verifying === payment.id || isExpired}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={isExpired ? 'Cannot approve expired payments' : 'Approve payment'}
-                            >
-                              <CheckCircleIcon className="w-5 h-5" />
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => openPaymentModal(payment, 'reject')}
-                              disabled={verifying === payment.id}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Reject payment"
-                            >
-                              <XCircleIcon className="w-5 h-5" />
-                              Reject
-                            </button>
+                            {isRequest ? (
+                              <div className="text-sm text-slate-600 italic">
+                                Waiting for customer to submit payment proof
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => openPaymentDetailsView(payment)}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors font-medium"
+                                  title="View payment details and proof"
+                                >
+                                  <EyeIcon className="w-5 h-5" />
+                                  View Details
+                                </button>
+                                <button
+                                  onClick={() => openPaymentModal(payment, 'verify')}
+                                  disabled={verifying === payment.id || isExpired}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={isExpired ? 'Cannot approve expired payments' : 'Approve payment'}
+                                >
+                                  <CheckCircleIcon className="w-5 h-5" />
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => openPaymentModal(payment, 'reject')}
+                                  disabled={verifying === payment.id}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Reject payment"
+                                >
+                                  <XCircleIcon className="w-5 h-5" />
+                                  Reject
+                                </button>
+                              </>
+                            )}
                           </div>
                         </motion.div>
                       )
@@ -735,7 +815,9 @@ export default function SubscriptionsPage() {
             className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="p-6 border-b border-blue-100/50 flex justify-between items-center sticky top-0 bg-white">
-              <h2 className="text-xl font-bold text-slate-900">Payment Details</h2>
+              <h2 className="text-xl font-bold text-slate-900">
+                {selectedPaymentDetails.type === 'request' ? 'Request Details' : 'Payment Details'}
+              </h2>
               <button
                 onClick={() => setShowPaymentDetails(false)}
                 className="text-slate-500 hover:text-slate-700 text-2xl leading-none"
@@ -762,17 +844,28 @@ export default function SubscriptionsPage() {
                   <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
                     selectedPaymentDetails.status === 'approved' ? 'bg-green-100 text-green-800' :
                     selectedPaymentDetails.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                    selectedPaymentDetails.type === 'request' ? 'bg-blue-100 text-blue-800' :
                     'bg-amber-100 text-amber-800'
                   }`}>
-                    {selectedPaymentDetails.status.charAt(0).toUpperCase() + selectedPaymentDetails.status.slice(1)}
+                    {selectedPaymentDetails.type === 'request' ? 'Request Pending' : 
+                     selectedPaymentDetails.status.charAt(0).toUpperCase() + selectedPaymentDetails.status.slice(1)}
                   </span>
                 </div>
+                {selectedPaymentDetails.type === 'request' ? (
+                  <div>
+                    <p className="text-sm text-slate-600 font-semibold mb-1">Request Type</p>
+                    <p className="text-sm font-medium text-slate-700 capitalize">{selectedPaymentDetails.requestType}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-slate-600 font-semibold mb-1">GCash Transaction ID</p>
+                    <p className="text-sm font-mono text-slate-700 break-all">{selectedPaymentDetails.gcashTransactionId}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-sm text-slate-600 font-semibold mb-1">GCash Transaction ID</p>
-                  <p className="text-sm font-mono text-slate-700 break-all">{selectedPaymentDetails.gcashTransactionId}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 font-semibold mb-1">Submitted At</p>
+                  <p className="text-sm text-slate-600 font-semibold mb-1">
+                    {selectedPaymentDetails.type === 'request' ? 'Requested At' : 'Submitted At'}
+                  </p>
                   <p className="text-sm text-slate-700">{new Date(selectedPaymentDetails.submittedAt).toLocaleString('en-PH')}</p>
                 </div>
                 <div>
@@ -782,7 +875,7 @@ export default function SubscriptionsPage() {
               </div>
 
               {/* GCash Proof Image */}
-              {paymentMetadata?.gcashProof && (
+              {paymentMetadata?.gcashProof && selectedPaymentDetails.type !== 'request' && (
                 <div className="border-t border-slate-200 pt-6">
                   <p className="text-sm text-slate-600 font-semibold mb-4">GCash Payment Proof</p>
                   <div className="flex justify-center">
@@ -798,7 +891,8 @@ export default function SubscriptionsPage() {
               )}
 
               {/* Additional Metadata */}
-              {paymentMetadata && Object.keys(paymentMetadata).length > 0 && paymentMetadata.gcashProof && (
+              {paymentMetadata && Object.keys(paymentMetadata).length > 0 && 
+               (paymentMetadata.gcashProof || selectedPaymentDetails.type === 'request') && (
                 <div className="border-t border-slate-200 pt-6">
                   <p className="text-sm text-slate-600 font-semibold mb-3">Additional Information</p>
                   <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-700">
@@ -889,6 +983,25 @@ export default function SubscriptionsPage() {
                   rows={3}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Features (one per line)
+                </label>
+                <textarea
+                  value={(editForm.features as string[])?.join('\n') || ''}
+                  onChange={(e) =>
+                    setEditForm({ 
+                      ...editForm, 
+                      features: e.target.value.split('\n').filter(f => f.trim())
+                    })
+                  }
+                  rows={5}
+                  placeholder="Full access to all features&#10;14 days free trial&#10;No credit card required&#10;Cancel anytime"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-1">Enter each feature on a new line</p>
               </div>
             </div>
 

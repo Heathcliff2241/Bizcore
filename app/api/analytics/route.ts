@@ -63,7 +63,9 @@ export async function GET(req: NextRequest) {
         createdAt: {
           gte: startDate,
           lte: endDate
-        }
+        },
+        paymentStatus: 'paid',
+        status: { in: ['completed', 'delivered'] }
       },
       include: {
         orderItems: {
@@ -83,14 +85,16 @@ export async function GET(req: NextRequest) {
       take: 1000
     })
 
-    // Fetch previous period orders for comparison
+    // Fetch previous period orders for comparison (only paid and completed)
     const prevOrders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
         createdAt: {
           gte: prevStartDate,
           lte: prevEndDate
-        }
+        },
+        paymentStatus: 'paid',
+        status: { in: ['completed', 'delivered'] }
       }
     })
 

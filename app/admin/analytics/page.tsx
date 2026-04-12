@@ -69,33 +69,33 @@ export default function AnalyticsPage() {
       tenants: 3,
     },
     revenueTrend: [
-      { date: 'Dec 4', amount: 1200 },
-      { date: 'Dec 5', amount: 2100 },
-      { date: 'Dec 6', amount: 2800 },
-      { date: 'Dec 7', amount: 2200 },
-      { date: 'Dec 8', amount: 3500 },
-      { date: 'Dec 9', amount: 4100 },
-      { date: 'Dec 10', amount: 3800 },
-      { date: 'Dec 11', amount: 4900 },
-      { date: 'Dec 12', amount: 4200 },
-      { date: 'Dec 13', amount: 5100 },
-      { date: 'Dec 14', amount: 6200 },
-      { date: 'Dec 15', amount: 5800 },
-      { date: 'Dec 16', amount: 6500 },
-      { date: 'Dec 17', amount: 7100 },
-      { date: 'Dec 18', amount: 6900 },
-      { date: 'Dec 19', amount: 7800 },
-      { date: 'Dec 20', amount: 8200 },
-      { date: 'Dec 21', amount: 7600 },
-      { date: 'Dec 22', amount: 8900 },
-      { date: 'Dec 23', amount: 9100 },
-      { date: 'Dec 24', amount: 8700 },
-      { date: 'Dec 25', amount: 9500 },
-      { date: 'Dec 26', amount: 8400 },
-      { date: 'Dec 27', amount: 9800 },
-      { date: 'Dec 28', amount: 10200 },
-      { date: 'Dec 29', amount: 9600 },
-      { date: 'Dec 30', amount: 10800 },
+      { date: 'Dec 4', amount: 12000 },
+      { date: 'Dec 5', amount: 21000 },
+      { date: 'Dec 6', amount: 28000 },
+      { date: 'Dec 7', amount: 22000 },
+      { date: 'Dec 8', amount: 35000 },
+      { date: 'Dec 9', amount: 41000 },
+      { date: 'Dec 10', amount: 38000 },
+      { date: 'Dec 11', amount: 49000 },
+      { date: 'Dec 12', amount: 42000 },
+      { date: 'Dec 13', amount: 51000 },
+      { date: 'Dec 14', amount: 62000 },
+      { date: 'Dec 15', amount: 58000 },
+      { date: 'Dec 16', amount: 65000 },
+      { date: 'Dec 17', amount: 71000 },
+      { date: 'Dec 18', amount: 69000 },
+      { date: 'Dec 19', amount: 78000 },
+      { date: 'Dec 20', amount: 82000 },
+      { date: 'Dec 21', amount: 76000 },
+      { date: 'Dec 22', amount: 89000 },
+      { date: 'Dec 23', amount: 91000 },
+      { date: 'Dec 24', amount: 87000 },
+      { date: 'Dec 25', amount: 95000 },
+      { date: 'Dec 26', amount: 84000 },
+      { date: 'Dec 27', amount: 98000 },
+      { date: 'Dec 28', amount: 102000 },
+      { date: 'Dec 29', amount: 96000 },
+      { date: 'Dec 30', amount: 108000 },
     ]
   }
 
@@ -115,6 +115,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     console.log('Page mounted, setting initial demo data')
     setData(demoData)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchAnalytics = async () => {
@@ -312,7 +313,7 @@ export default function AnalyticsPage() {
             {/* Growth Trends */}
             <motion.div
               variants={itemVariants}
-              className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8"
+              className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6"
             >
               <h2 className="text-xl font-bold text-slate-900 mb-6">Growth Trends</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -401,9 +402,14 @@ export default function AnalyticsPage() {
                         stroke="#6b7280"
                       />
                       <YAxis 
+                        type="number"
+                        domain={[0, 'dataMax']}
                         tick={{ fontSize: 12 }}
                         stroke="#6b7280"
-                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
+                        tickFormatter={(value) => {
+                          if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
+                          return `$${value.toFixed(0)}`
+                        }}
                       />
                       <Tooltip 
                         formatter={(value) => `$${(value as number).toLocaleString()}`}

@@ -187,7 +187,7 @@ export async function PUT(
 
     // Log the activity
     await logActivity({
-      userId: session.user.id,
+      userId: parseInt(session.user.id, 10),
       tenantId: existingPage.tenantId,
       action: 'PAGE_DESIGN_UPDATED',
       details: {
@@ -251,7 +251,7 @@ export async function DELETE(
 
     // Log the activity
     await logActivity({
-      userId: session.user.id,
+      userId: parseInt(session.user.id, 10),
       tenantId: page.tenantId,
       action: 'PAGE_DELETED',
       details: {

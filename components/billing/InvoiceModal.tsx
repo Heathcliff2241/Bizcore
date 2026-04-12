@@ -57,7 +57,7 @@ export function InvoiceModal({
       currency: 'PHP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount / 100);
+    }).format(amount);
   };
 
   const formatDate = (date: string) => {

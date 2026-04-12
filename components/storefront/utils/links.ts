@@ -10,14 +10,14 @@ interface ResolveOptions {
 const LABEL_ROUTE_ALIASES: Record<string, string> = {
   home: '/',
   homepage: '/',
-  menu: '/menu',
-  shop: '/menu',
-  shops: '/menu',
-  product: '/menu',
-  products: '/menu',
-  catalogue: '/menu',
-  catalog: '/menu',
-  discover: '/menu',
+  menu: '/home',
+  shop: '/home',
+  shops: '/home',
+  product: '/home',
+  products: '/home',
+  catalogue: '/home',
+  catalog: '/home',
+  discover: '/home',
   cart: '/cart',
   basket: '/cart',
   checkout: '/checkout',
@@ -87,6 +87,14 @@ export function resolveStorefrontHref(
   }
 
   let trimmed = candidate.trim()
+
+  // Handle anchor links (e.g., #products, #about, #contact) - pass through unchanged
+  if (trimmed.startsWith('#') && trimmed.length > 1) {
+    return {
+      href: trimmed,
+      isExternal: false
+    }
+  }
 
   // Compute the storefront base path for tenant-aware routing early so it can
   // be used by alias mapping logic below; this avoids using `base` before

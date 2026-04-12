@@ -5,13 +5,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { ShoppingCart, Menu, X, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useCustomerSession } from "./hooks/useCustomerSession";
+import { useSession } from "next-auth/react";
 import { useCart } from "./hooks/useCart";
 import type { StorefrontContext } from "./types";
 import { resolveStorefrontHref } from "./utils/links";
 import { LoginModal, SignupModal } from "./AuthModals";
 import { CartModal } from "./CartModal";
 import { ProfileModal } from "./ProfileModal";
+import { MobileMenuModal } from "./MobileMenuModal";
 import type { Session } from "next-auth";
 
 interface ExtendedUser {
@@ -76,7 +77,7 @@ export function HeaderGlass({
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   
-  const { data: clientSession, status: clientStatus } = useCustomerSession();
+  const { data: clientSession, status: clientStatus } = useSession();
   
   const customerSession = serverSession ?? clientSession;
   const customerStatus = serverSession ? 'authenticated' : clientStatus;
@@ -101,6 +102,22 @@ export function HeaderGlass({
 
   const renderNavLink = (label: string, url: string, index: number, onClick?: () => void) => {
     const resolved = resolveStorefrontHref(url, storefront, { label });
+    
+    // For anchor links (hash URLs), use native anchor tag instead of Next Link
+    if (resolved.href.startsWith('#')) {
+      return (
+        <a
+          key={`${label}-${index}`}
+          href={resolved.href}
+          className="text-sm font-medium transition-opacity hover:opacity-80"
+          style={{ color: textColor, textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+          onClick={onClick}
+        >
+          {label}
+        </a>
+      );
+    }
+    
     if (resolved.isExternal) {
       return (
         <a
@@ -132,12 +149,28 @@ export function HeaderGlass({
 
   const renderMobileNavLink = (label: string, url: string, index: number) => {
     const resolved = resolveStorefrontHref(url, storefront, { label });
+    
+    // For anchor links (hash URLs), use native anchor tag instead of Next Link
+    if (resolved.href.startsWith('#')) {
+      return (
+        <a
+          key={`${label}-${index}`}
+          href={resolved.href}
+          className="py-2 text-base font-medium hover:opacity-80 transition-opacity block"
+          style={{ color: textColor, textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          {label}
+        </a>
+      );
+    }
+    
     if (resolved.isExternal) {
       return (
         <a
           key={`${label}-${index}`}
           href={resolved.href}
-          className="py-2 text-base font-medium hover:opacity-80 transition-opacity"
+          className="py-2 text-base font-medium hover:opacity-80 transition-opacity block"
           style={{ color: textColor, textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
           target="_blank"
           rel="noopener noreferrer"
@@ -172,7 +205,7 @@ export function HeaderGlass({
       }`}
       style={{
         background: backgroundColor,
-        height: `${height}px`,
+        height: `clamp(56px, 12vw, ${height}px)`,
       }}
     >
       {/* Glass background overlay */}
@@ -189,7 +222,7 @@ export function HeaderGlass({
       />
 
       {/* Content */}
-      <div className={`relative z-10 w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} px-8 md:px-16 lg:px-24 h-full overflow-visible flex items-center justify-between`}>
+      <div className={`relative z-10 w-full ${!fullWidth ? 'max-w-7xl mx-auto' : ''} px-3 sm:px-4 md:px-6 lg:px-8 h-full overflow-visible flex items-center justify-between gap-2 sm:gap-4`}>
         {/* Logo */}
         {logo.isExternal ? (
           <a
@@ -200,7 +233,7 @@ export function HeaderGlass({
           >
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="flex items-center gap-3"
+              className="flex items-center gap-2 sm:gap-3"
             >
               {logoImage && (
                 <Image
@@ -208,13 +241,13 @@ export function HeaderGlass({
                   alt={logoText}
                   height={Math.round(height * 0.6)}
                   width={120}
-                  className="h-10 w-auto object-contain"
+                  className="h-8 sm:h-10 w-auto object-contain"
                   style={{ maxHeight: `${height * 0.6}px` }}
                   priority
                 />
               )}
               <div
-                className="text-2xl font-bold"
+                className="text-lg sm:text-xl md:text-2xl font-bold"
                 style={{ color: textColor, textShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               >
                 {logoText}
@@ -225,7 +258,7 @@ export function HeaderGlass({
           <Link href={logo.href} className="flex-shrink-0">
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="flex items-center gap-3"
+              className="flex items-center gap-2 sm:gap-3"
             >
               {logoImage && (
                 <Image
@@ -233,7 +266,7 @@ export function HeaderGlass({
                   alt={logoText}
                   height={Math.round(height * 0.6)}
                   width={120}
-                  className="h-10 w-auto object-contain"
+                  className="h-8 sm:h-10 w-auto object-contain"
                   style={{ maxHeight: `${height * 0.6}px` }}
                   priority
                 />
@@ -259,13 +292,15 @@ export function HeaderGlass({
         <div className="flex items-center gap-2 md:gap-4">
           {/* Desktop Auth Section */}
           <div className="hidden md:flex items-center gap-2 overflow-visible">
-            {!mounted || customerStatus === 'loading' ? (
-              <div className="text-sm text-gray-300">Loading...</div>
+            {!mounted ? (
+              <div className="w-10 h-10 rounded-full bg-gray-300 animate-pulse" />
+            ) : customerStatus === 'loading' ? (
+              <div className="w-10 h-10 rounded-full bg-gray-300 animate-pulse" />
             ) : isCustomerLoggedIn ? (
               <div className="relative">
                 <button
                   onClick={() => setProfileModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all min-h-10 hover:opacity-80 active:opacity-60"
                   style={{
                     color: textColor,
                     background: 'rgba(255, 255, 255, 0.15)',
@@ -273,6 +308,7 @@ export function HeaderGlass({
                     backdropFilter: 'blur(5px)',
                     boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
                   }}
+                  title={customerName}
                 >
                   <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                     {getCustomerInitials(customerName)}
@@ -318,7 +354,7 @@ export function HeaderGlass({
             cart.isExternal ? (
               <a
                 href={cart.href}
-                className="relative p-2 rounded-full transition-all"
+                className="relative p-2 md:p-1.5 rounded-full transition-all min-h-10 min-w-10 flex items-center justify-center hover:opacity-80 active:opacity-60"
                 style={{
                   color: textColor,
                   background: 'rgba(255, 255, 255, 0.15)',
@@ -328,20 +364,21 @@ export function HeaderGlass({
                 }}
                 target="_blank"
                 rel="noopener noreferrer"
+                title="Shopping cart"
               >
-                <ShoppingCart size={24} />
+                <ShoppingCart size={20} className="h-5 md:h-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                     {cartItemCount > 9 ? "9+" : cartItemCount}
                   </span>
                 )}
               </a>
             ) : (
               <motion.button
-                whileHover={{ scale: 1.1 }}
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setCartModalOpen(true)}
-                className="relative p-2 rounded-full transition-all"
+                className="relative p-2 md:p-1.5 rounded-full transition-all min-h-10 min-w-10 flex items-center justify-center hover:opacity-80 active:opacity-60"
                 style={{
                   color: textColor,
                   background: 'rgba(255, 255, 255, 0.15)',
@@ -349,10 +386,11 @@ export function HeaderGlass({
                   backdropFilter: 'blur(5px)',
                   boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
                 }}
+                title="Shopping cart"
               >
-                <ShoppingCart size={24} />
+                <ShoppingCart size={20} className="h-5 md:h-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                     {cartItemCount > 9 ? "9+" : cartItemCount}
                   </span>
                 )}
@@ -363,7 +401,7 @@ export function HeaderGlass({
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-full transition-all"
+            className="md:hidden p-2 rounded-full transition-all min-h-10 min-w-10 flex items-center justify-center hover:opacity-80 active:opacity-60"
             style={{
               color: textColor,
               background: 'rgba(255, 255, 255, 0.15)',
@@ -371,42 +409,37 @@ export function HeaderGlass({
               backdropFilter: 'blur(5px)',
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
             }}
+            aria-label="Toggle menu"
+            title={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            {mobileMenuOpen ? <X size={20} className="w-5 h-5" /> : <Menu size={20} className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          className="md:hidden relative z-10 border-t"
-          style={{
-            borderColor: glassBorderColor,
-            background: `rgba(255, 255, 255, ${glassOpacity})`,
-            backdropFilter: `blur(${glassBlurAmount}px)`,
-            borderLeft: `1px solid ${glassBorderColor}`,
-            borderRight: `1px solid ${glassBorderColor}`,
-            borderBottom: `1px solid ${glassBorderColor}`,
-          }}
-        >
-          <nav className="px-8 py-4 space-y-3">
-            {navigationLinks.map((link, index) =>
-              renderMobileNavLink(link.label, link.url, index)
-            )}
-          </nav>
-        </motion.div>
-      )}
-
-      {/* Auth, Cart & Profile Modals */}
+      {/* Auth, Cart, Menu & Profile Modals */}
       {mounted && (
         <>
           <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} storefront={storefront} />
           <SignupModal isOpen={signupModalOpen} onClose={() => setSignupModalOpen(false)} storefront={storefront} />
           <CartModal isOpen={cartModalOpen} onClose={() => setCartModalOpen(false)} storefront={storefront} />
+          <MobileMenuModal
+            isOpen={mobileMenuOpen}
+            onClose={() => setMobileMenuOpen(false)}
+            navigationLinks={navigationLinks}
+            textColor={textColor}
+            storefront={storefront}
+            isLoggedIn={isCustomerLoggedIn}
+            customerName={customerName}
+            onAuthClick={(type) => {
+              if (type === 'signin') {
+                setLoginModalOpen(true);
+              } else {
+                setSignupModalOpen(true);
+              }
+            }}
+            onProfileClick={() => setProfileModalOpen(true)}
+          />
           <ProfileModal
             isOpen={profileModalOpen}
             onClose={() => setProfileModalOpen(false)}

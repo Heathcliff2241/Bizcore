@@ -9,7 +9,9 @@ import {
   TrashIcon,
   CheckIcon,
   ArrowPathIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
+import { exportFromAPI } from '@/lib/csv-export'
 
 interface User {
   id: string
@@ -86,6 +88,7 @@ export default function UsersPage() {
   const [limit] = useState(10)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -182,6 +185,32 @@ export default function UsersPage() {
     }
   }
 
+  const handleExportCSV = async () => {
+    setExporting(true)
+    try {
+      // Build query params with current filters
+      const params = new URLSearchParams({
+        ...(search && { search }),
+        ...(roleFilter && { role: roleFilter }),
+        ...(statusFilter && { status: statusFilter }),
+      })
+
+      const result = await exportFromAPI(
+        `/api/admin/export/users?${params}`,
+        `users_export_${new Date().toISOString().split('T')[0]}`
+      )
+
+      if (!result.success) {
+        alert(result.error || 'Failed to export users')
+      }
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export users')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const getRoleColor = (role: string) => {
     return ROLES.find((r) => r.value === role)?.color || 'bg-slate-100 text-slate-800'
   }
@@ -220,6 +249,14 @@ export default function UsersPage() {
             <h1 className="text-4xl font-bold text-blue-900">Users Management</h1>
             <p className="text-blue-700 mt-2">Manage all system users, roles, and permissions</p>
           </div>
+          <button
+            onClick={handleExportCSV}
+            disabled={exporting || users.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            <ArrowDownTrayIcon className="w-5 h-5" />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
         </motion.div>
 
         {/* Stats */}

@@ -8,6 +8,7 @@ import { useSession } from 'next-auth/react'
 import { useCustomerSession } from './hooks/useCustomerSession'
 import { useCart } from './hooks/useCart'
 import { resolveStorefrontHref } from './utils/links'
+import { getResponsiveSizes } from './utils/responsiveImages'
 import type { StorefrontContext } from './types'
 
 interface Product {
@@ -38,7 +39,7 @@ export function ProductCard({
   const [isAdding, setIsAdding] = useState(false)
   const [showAddedFeedback, setShowAddedFeedback] = useState(false)
 
-  const resolved = resolveStorefrontHref(`/menu/${product.slug}`, storefront)
+  const resolved = resolveStorefrontHref(`/home/${product.slug}`, storefront)
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -69,6 +70,9 @@ export function ProductCard({
               alt={product.name}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-300"
+              sizes={getResponsiveSizes('product')}
+              loading="lazy"
+              quality={75}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">

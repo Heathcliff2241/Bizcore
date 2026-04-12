@@ -93,9 +93,20 @@ export async function POST(
       }
     })
 
+    console.log('[Publish] Page published:', {
+      pageId,
+      slug: page.slug,
+      hasContent: !!page.content,
+      contentType: typeof page.content,
+      contentLength: Array.isArray(page.content) ? (page.content as unknown[]).length : 'not-array',
+      hasPublishedContent: !!publishedPage.publishedContent,
+      publishedContentType: typeof publishedPage.publishedContent,
+      publishedContentLength: Array.isArray(publishedPage.publishedContent) ? (publishedPage.publishedContent as unknown[]).length : 'not-array'
+    })
+
     // Log the activity
     await logActivity({
-      userId: session.user.id,
+      userId: parseInt(session.user.id, 10),
       tenantId,
       action: 'PAGE_PUBLISHED',
       details: {
@@ -106,7 +117,8 @@ export async function POST(
       }
     })
 
-    const revalidateResult = await revalidateWithRetry(`/storefront/${tenant.subdomain}/${page.slug}`)
+    // Revalidate the home page route (only subdomain, no slug)
+    const revalidateResult = await revalidateWithRetry(`/storefront/${tenant.subdomain}`)
 
     return NextResponse.json({
       success: true,

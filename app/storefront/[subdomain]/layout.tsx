@@ -1,5 +1,8 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { getServerSession } from 'next-auth/next'
+import { signOut } from 'next-auth/react'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CustomerProviders } from '@/lib/providers'
 import { CartProvider } from '@/components/storefront/hooks/useCart'
@@ -27,6 +30,22 @@ export default async function StorefrontLayout(props: Props) {
   if (!tenant) return notFound()
 
   const storefront = buildStorefrontObject(tenant)
+  
+  // Get server session to pass to SessionProvider for instant client-side availability
+  const session = await getServerSession(authOptions)
+
+  // If customer is logged in, validate they belong to this tenant
+  if (session?.user?.id && session?.user?.role === 'customer') {
+    const customer = await prisma.customer.findUnique({
+      where: { id: parseInt(session.user.id) }
+    })
+
+    // If customer doesn't exist or doesn't belong to this tenant, redirect to auth with sign out
+    if (!customer || customer.tenantId !== tenant.id) {
+      // Use redirect to sign out and go to login
+      redirect(`/auth/signin?callbackUrl=/storefront/${subdomain}`)
+    }
+  }
 
   const cssVars: React.CSSProperties = {
     '--color-primary': storefront.primaryColor || '#3b82f6',
@@ -34,7 +53,7 @@ export default async function StorefrontLayout(props: Props) {
   } as React.CSSProperties
 
   return (
-    <CustomerProviders>
+    <CustomerProviders session={session}>
       <CartProvider>
         <div style={cssVars as React.CSSProperties} className="min-h-screen bg-white text-slate-900">
           {children}

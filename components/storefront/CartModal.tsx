@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useCustomerSession } from './hooks/useCustomerSession'
+import { useSession } from 'next-auth/react'
 import { useCart, type CartItem } from './hooks/useCart'
 import type { StorefrontContext } from './types'
 
@@ -25,7 +25,7 @@ interface Address {
 }
 
 export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefront }) => {
-  const { data: session } = useCustomerSession()
+  const { data: session } = useSession()
   const { cart, clearCart, removeFromCart, updateQuantity } = useCart(storefront?.subdomain, session?.user?.id)
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
@@ -75,11 +75,21 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefron
       setName(session.user.name || '')
       setEmail(session.user.email || '')
       
-      // Fetch full customer record if available
-      if (session.user.id) {
-        fetch('/api/customers')
-          .then(res => res.json())
+      // Fetch full customer record to verify they belong to this tenant
+      if (session.user.id && storefront?.subdomain) {
+        fetch(`/api/customers?subdomain=${storefront.subdomain}`)
+          .then(res => {
+            if (res.status === 404) {
+              // Customer not registered on this tenant's storefront
+              setError('Your account is not registered on this storefront. Please create a new account.')
+              setStep('cart')
+              return null
+            }
+            if (!res.ok) throw new Error('Failed to load customer')
+            return res.json()
+          })
           .then(data => {
+            if (!data) return
             if (data.phone) setPhone(data.phone)
             if (data.address) {
               const addr = typeof data.address === 'string' ? JSON.parse(data.address) : data.address
@@ -122,7 +132,11 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefron
 
   const subtotal = cart.reduce((sum: number, item: CartItem) => sum + (item.price * (Number(item.quantity) || 1)), 0)
   const tax = subtotal * (taxRate / 100)
-  const deliveryFee = deliveryType === 'delivery' ? 50 : 0
+  // Get delivery fee from tenant settings or default to 50
+  const settingsObj = storefront.settings as Record<string, unknown> | undefined
+  const deliverySettings = settingsObj?.delivery as Record<string, number> | undefined
+  const defaultDeliveryFee = deliverySettings?.defaultDeliveryFee ?? 50
+  const deliveryFee = deliveryType === 'delivery' ? defaultDeliveryFee : 0
   const total = subtotal + tax + deliveryFee
 
   const handleCheckout = () => {
@@ -130,6 +144,13 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefron
       setError('Your cart is empty')
       return
     }
+    
+    // Require authentication before checkout
+    if (!session?.user) {
+      setError('Please sign in or create an account to checkout')
+      return
+    }
+    
     setError(null)
     setStep('checkout')
   }
@@ -236,7 +257,7 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefron
 
       clearCart()
       onClose()
-      router.push(`/storefront/${storefront?.subdomain}/orders`)
+      router.push(`/storefront/${storefront?.subdomain}/account?tab=orders`)
     } catch (err) {
       console.error('Checkout error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -274,32 +295,33 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, storefron
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-screen overflow-y-auto relative z-[9999]">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative z-[9999]">
               {/* Header */}
-              <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-gray-900">
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 sm:p-6 flex items-center justify-between gap-2">
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
                   {step === 'cart' ? 'Your Cart' : 'Checkout'}
                 </h1>
                 <button
                   onClick={handleClose}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                  className="text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
+                  aria-label="Close cart"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 sm:w-6 h-5 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
               {/* Content */}
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {step === 'cart' ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     {cart.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-500 mb-6">Your cart is empty</p>
+                      <div className="text-center py-8 sm:py-12">
+                        <p className="text-gray-500 mb-4 sm:mb-6 text-sm sm:text-base">Your cart is empty</p>
                         <button
                           onClick={handleClose}
                           className="w-full px-6 py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-900 transition-colors"

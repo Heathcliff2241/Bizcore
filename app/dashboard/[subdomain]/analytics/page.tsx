@@ -2,9 +2,5 @@ import { AnalyticsManager } from '@/components/dashboard/analytics/AnalyticsMana
 
 export default async function AnalyticsPage({ params }: { params: Promise<{ subdomain: string }> }) {
   const { subdomain } = await params
-  return (
-    <div className="space-y-6">
-      <AnalyticsManager subdomain={subdomain} />
-    </div>
-  )
+  return <AnalyticsManager subdomain={subdomain} />
 }

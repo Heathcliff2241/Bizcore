@@ -4,6 +4,7 @@ export const createPOSOrderSchema = z.object({
   items: z.array(
     z.object({
       productId: z.number().positive('Product ID required'),
+      variantId: z.number().positive().nullable().optional(),
       quantity: z.number().positive('Quantity must be positive'),
       notes: z.string().optional()
     })

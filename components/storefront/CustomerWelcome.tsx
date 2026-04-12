@@ -30,7 +30,7 @@ export function CustomerWelcome({ storefront }: CustomerWelcomeProps) {
     )
   }
 
-  const menuHref = resolveStorefrontHref('/menu', storefront).href
+  const menuHref = resolveStorefrontHref('/home', storefront).href
   const accountHref = resolveStorefrontHref('/account', storefront).href
 
   return (

@@ -20,11 +20,26 @@ WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Accept build args for environment-dependent build
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXTAUTH_URL
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV NEXTAUTH_URL=${NEXTAUTH_URL}
+
 # Copy cached node_modules from deps layer
 COPY --from=deps /app/node_modules ./node_modules
 
+# Copy prisma schema early
+COPY prisma ./prisma
+
 # Copy the rest of your project files
 COPY . .
+
+# Ensure public directory exists
+RUN mkdir -p /app/public
+
+# Generate Prisma Client before building Next.js
+RUN npx prisma generate
 
 # Build Next.js app
 RUN npm run build
@@ -40,11 +55,15 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy only essentials from builder
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/prisma ./prisma
+
+# Create public directory and copy if it exists
+RUN mkdir -p ./public
+RUN [ -d /app/public ] && cp -r /app/public/* ./public/ || true
 
 # Expose the app port
 EXPOSE 3000
