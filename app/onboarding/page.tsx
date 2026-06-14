@@ -16,7 +16,7 @@ import {
   ArchiveBoxIcon,
   CreditCardIcon,
   // PaintBrushIcon - removed (BrandStudio)
-  BarChart3Icon
+  PresentationChartBarIcon
 } from '@heroicons/react/24/outline'
 
 interface OnboardingStep {
@@ -378,7 +378,7 @@ function WelcomeStep() {
           { Icon: CreditCardIcon, label: 'POS System' },
           { Icon: ShoppingCartIcon, label: 'Online Ordering' },
           { Icon: ArchiveBoxIcon, label: 'Inventory' },
-          { Icon: BarChart3Icon, label: 'Analytics' }
+          { Icon: PresentationChartBarIcon, label: 'Analytics' }
         ].map((item, i) => (
           <motion.div
             key={i}
