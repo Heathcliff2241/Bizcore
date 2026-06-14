@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -275,7 +277,7 @@ model Order {
   amountPaid           Float                @default(0)
   paymentStatus        PaymentStatus        @default(unpaid)
   deliveryAddress      String?
-  paymentProof         String?              @db.Text
+  paymentProof         String?
   orderItems           OrderItem[]
   orderStatusHistories OrderStatusHistory[]
   customer             Customer?            @relation(fields: [customerId], references: [id], onDelete: Cascade)

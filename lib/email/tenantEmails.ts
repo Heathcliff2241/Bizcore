@@ -92,7 +92,7 @@ export async function sendTenantWarningEmail(
               <div class="action-title">What You Can Do</div>
               <div class="action-text">
                 <p>Please take prompt action to address this matter. If you have any questions or need assistance, our support team is here to help.</p>
-                <a href="https://bizcore.test/dashboard" class="cta-button">Go to Your Dashboard</a>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://app.bizcore.ph'}/dashboard" class="cta-button">Go to Your Dashboard</a>
               </div>
             </div>
 

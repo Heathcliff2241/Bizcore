@@ -76,14 +76,13 @@ const router = useRouter()
             </h1>
             <p className="text-slate-600 mt-2">Manage and design your store templates</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleOpenInNewTab}
-            className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition"
+          <button
+            disabled
+            className="px-4 py-2 bg-slate-200 text-slate-400 border border-slate-300 rounded-lg font-medium cursor-not-allowed"
+            title="BrandStudio is disabled in this build"
           >
-            Open BrandStudio ↗
-          </motion.button>
+            BrandStudio Disabled
+          </button>
         </div>
       </div>
 
@@ -125,7 +124,7 @@ const router = useRouter()
             <SparklesIcon className="w-8 h-8 text-slate-500" />
           </div>
           <p className="text-slate-600 font-medium">No templates yet</p>
-          <p className="text-slate-500 text-sm mt-1">Create your first template using BrandStudio</p>
+          <p className="text-slate-500 text-sm mt-1">BrandStudio builder is deactivated in this build</p>
         </motion.div>
       )}
 

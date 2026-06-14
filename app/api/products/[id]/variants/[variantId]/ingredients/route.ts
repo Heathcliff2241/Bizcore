@@ -44,13 +44,26 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Save or update variant ingredient
-    await prisma.$executeRaw`
-      INSERT INTO "variant_ingredients" ("variantId", "ingredientId", "quantity", "createdAt", "updatedAt")
-      VALUES (${Number(variantId)}, ${Number(ingredientId)}, ${Number(quantity)}, NOW(), NOW())
-      ON CONFLICT ("variantId", "ingredientId") 
-      DO UPDATE SET "quantity" = ${Number(quantity)}, "updatedAt" = NOW()
-    `
+    // Save or update variant ingredient using standard, database-agnostic Prisma Client
+    await prisma.variantIngredient.upsert({
+      where: {
+        variantId_ingredientId: {
+          variantId: Number(variantId),
+          ingredientId: Number(ingredientId)
+        }
+      },
+      update: {
+        quantity: Number(quantity),
+        updatedAt: new Date()
+      },
+      create: {
+        variantId: Number(variantId),
+        ingredientId: Number(ingredientId),
+        quantity: Number(quantity),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    })
 
     return NextResponse.json({ success: true, data: { variantId: Number(variantId), ingredientId: Number(ingredientId), quantity: Number(quantity) } })
   } catch (error) {
@@ -102,11 +115,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Delete variant ingredient
-    await prisma.$executeRaw`
-      DELETE FROM "variant_ingredients"
-      WHERE "variantId" = ${Number(variantId)} AND "ingredientId" = ${Number(ingredientId)}
-    `
+    // Delete variant ingredient using standard, database-agnostic Prisma Client
+    await prisma.variantIngredient.delete({
+      where: {
+        variantId_ingredientId: {
+          variantId: Number(variantId),
+          ingredientId: Number(ingredientId)
+        }
+      }
+    })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Failed to delete variant ingredient:', error)

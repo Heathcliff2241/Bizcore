@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { logActivity } from '@/lib/activityLogger'
 
-// CORS headers - allow BrandStudio origins (both bizcore.test and localhost variants)
+// CORS headers - allow app origins from env and localhost variants
 function getCorsHeaders(request: NextRequest) {
   const origin = request.headers.get('origin') || ''
   
@@ -15,12 +15,13 @@ function getCorsHeaders(request: NextRequest) {
     return {}
   }
   
-  // Allowed origins - support bizcore.test and localhost variants
+  // Build allowedOrigins from env variable + localhost dev variants
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || ''
   const allowedOrigins = [
-    'http://bizcore.test',
-    'http://localhost:5174',
-    'http://localhost:5173',
+    ...(appUrl ? [appUrl] : []),
     'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost',
   ]
   
@@ -29,7 +30,7 @@ function getCorsHeaders(request: NextRequest) {
   )
   
   return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || origin),
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true',

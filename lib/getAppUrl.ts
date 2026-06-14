@@ -1,7 +1,7 @@
 /**
  * Dynamic app URL resolver
  * Returns the appropriate app URL based on environment and context
- * Supports both bizcore.test (via nginx) and localhost:3000 (direct)
+ * For Vercel deployments, set NEXT_PUBLIC_APP_URL to your Vercel domain.
  */
 
 export function getAppUrl(): string {
@@ -12,7 +12,7 @@ export function getAppUrl(): string {
 
   // Server-side fallback
   if (typeof window === 'undefined') {
-    return 'http://bizcore.test'
+    return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
   }
 
   // Client-side fallback - use window location
@@ -29,34 +29,20 @@ export function getAppUrl(): string {
     }
   }
 
-  return 'http://bizcore.test'
+  return 'http://localhost:3000'
 }
 
 export function getBrandStudioUrl(): string {
-  // Server-side fallback
-  if (typeof window === 'undefined') {
-    return 'http://bizcore.test/studio'
-  }
-
-  // Client-side: Use the current app URL + /studio path
-  // This works because nginx serves BrandStudio at /studio path
-  const appUrl = getAppUrl()
-  return `${appUrl}/studio`
+  // BrandStudio is deactivated in this build. Returns a stub URL.
+  return ''
 }
 
 /**
  * Generate postMessage origin for iframe communication
- * Must match the BrandStudio iframe origin, not the parent app origin
+ * BrandStudio is deactivated; returns empty string.
  */
 export function getPostMessageOrigin(): string {
-  const brandStudioUrl = getBrandStudioUrl()
-  // Extract origin from BrandStudio URL (protocol + hostname + port)
-  try {
-    const url = new URL(brandStudioUrl)
-    return url.origin
-  } catch {
-    return brandStudioUrl
-  }
+  return ''
 }
 
 /**

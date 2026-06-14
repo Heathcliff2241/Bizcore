@@ -5,7 +5,12 @@ const path = require('path')
 const nextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   images: {
-    domains: ['bizcore.test', 'localhost', '127.0.0.1'],
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.vercel.app' },
+      { protocol: 'https', hostname: '**.vercel.com' },
+      { protocol: 'http', hostname: 'localhost' },
+      { protocol: 'http', hostname: '127.0.0.1' },
+    ],
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [320, 480, 640, 768, 1024, 1280, 1440, 1536],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
